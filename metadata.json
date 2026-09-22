@@ -1,0 +1,6 @@
+{
+  "name": "Voucht",
+  "description": "Build a verified Trust Score that proves your reliability. Get vouched. Get hired.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
