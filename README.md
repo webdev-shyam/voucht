@@ -2,30 +2,32 @@
 
 > **Build a verified Trust Score that proves your reliability. Get vouched. Get hired.**
 
-Clients don't hire the best freelancer — they hire the one they **TRUST** most. Voucht gives freelancers a verified, cryptographic Trust Score (0–100) based on actual project delivery milestones confirmed by authorized clients.
+Clients don't hire the best freelancer — they hire the one they **TRUST** most. Voucht gives freelancers a Trust Score (0–100) calculated by the database from milestones the client confirmed themselves.
 
 ---
 
 ## 🌟 Key Features
 
-1. **🏆 Verified Trust Score (0–100)**
-   - Algorithmic evaluation based on on-time delivery rate (40%), milestone completion (30%), response latency (15%), and dispute/ghost penalties (15%).
-   - Automatic tier assignment: *Exceptional* (80+), *Reliable* (60–79), and *Building* (<60).
+1. **🏆 Trust Score (0–100)**
+   - One implementation: `recalculate_trust_score()` in `supabase/migrations/0001_harden_rls_and_trust_score.sql`. The app reads the stored number and never computes one.
+   - Weights: completed projects (40%), on-time client-confirmed deliveries (25%), no cancelled work (20%), track record volume (15%).
+   - Tiers: *Not yet verified* (no confirmed delivery), *Building* (1+ confirmed delivery), *Reliable* (60+ with 2 completed), *Highly reliable* (80+ with 3 completed).
+   - A brand-new account has no score at all — it is shown as "No verified work history yet.", never as a made-up number.
 
 2. **🌐 Public Proof Page (`/profile/[username]`)**
    - Clean, shareable public ledger displaying verified deliveries with masked client privacy (`S***a J.`), milestone timestamps, and live reputation gauge.
    - ISR-cached (`revalidate: 3600`) for high-speed edge delivery.
 
-3. **📄 AI Smart Contracts**
-   - Generate enforceable freelance contracts with milestone breakdowns, SLAs, and payment terms in under 60 seconds using Gemini AI.
+3. **📄 AI contract drafts**
+   - Generate a first-draft freelance agreement with milestone breakdown, delivery terms and payment terms using Gemini. Output is a starting point for review, not legal advice and not a self-enforcing document.
 
-4. **✅ Client Verification Workflow**
-   - Seamless one-click verification tokens sent to client emails via Resend.
-   - Clients confirm or dispute deliveries directly through secure token links (`/verify?token=...`).
+4. **✅ Client verification workflow**
+   - The freelancer sends a verification request from a delivery; the client gets a single-use link (`/verify/[token]`) by email.
+   - `record_verification()` runs as `SECURITY DEFINER`: it locks the delivery, writes the milestone and project state, recalculates the Trust Score and appends the activity log in one transaction.
 
-5. **🏅 Embeddable Trust Badge (`/badge/[username]`)**
-   - Live, dynamic 250×50 SVG badge displaying live Trust Score and completed project counts.
-   - Embeddable via `<img>` or `<iframe>` anywhere (GitHub, personal portfolio, email signatures).
+5. **🏅 Embeddable Trust Badge (`/api/badge/[username]`)**
+   - Dynamic SVG showing the stored Trust Score, or an "awaiting first verification" state for accounts with no history.
+   - Embeddable with `<img>` anywhere (GitHub, portfolio, email signature). `<iframe>` works too; the badge route sets `frame-ancestors *`.
 
 6. **💳 Multi-Rail Subscriptions**
    - **CREEM**: Merchant of Record for global credit & debit card recurring billing.
@@ -76,26 +78,50 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 # App & Domain
 NEXT_PUBLIC_APP_URL=https://voucht.tech
 
-# AI & Email
+# AI & Email — both optional; the features report themselves unavailable
+# rather than inventing output when the key is missing.
 GEMINI_API_KEY=your-gemini-key
+OPENROUTER_API_KEY=
 RESEND_API_KEY=re_your_resend_api_key
 
-# Payment Webhooks & Secrets
+# Payment providers
 CREEM_API_KEY=your_creem_api_key
+CREEM_PRODUCT_ID_PRO=prod_...
+CREEM_PRODUCT_ID_ELITE=prod_...
 CREEM_WEBHOOK_SECRET=your_creem_webhook_secret
+CREEM_TEST_MODE=false
+CREEM_API_BASE=
 NOWPAYMENTS_API_KEY=your_nowpayments_api_key
 NOWPAYMENTS_IPN_SECRET=your_nowpayments_ipn_secret
+NOWPAYMENTS_SANDBOX=true
 
 # Cron Security
 CRON_SECRET=your_secret_cron_token
+
+# Proof page visit analytics (rotates the daily viewer hash)
+PROFILE_VIEW_HASH_SECRET=generate_a_random_string
 ```
 
-### 3. Database Setup
+### 3. Database setup
 
-Execute the SQL migration schema in `supabase/schema.sql` within your Supabase SQL Editor:
-- Creates `profiles`, `projects`, `milestones`, `deliveries`, `subscriptions`, and `activity_log` tables.
-- Enables Row Level Security (RLS) policies.
-- Registers the `recalculate_trust_score(p_freelancer_id)` stored procedure.
+Apply in order in the Supabase SQL editor (or `supabase db push`):
+
+1. `supabase/schema.sql` — base tables, indexes, first-pass RLS policies and the
+   `handle_new_user()` trigger.
+2. `supabase/migrations/0001_harden_rls_and_trust_score.sql` — idempotent
+   hardening pass: column renames, owner-only RLS on the private tables, the
+   `public_profiles` / `public_deliveries` projections used by public pages,
+   `mask_client_name()`, `recalculate_trust_score()` and its triggers, and the
+   `get_verification_request()` / `record_verification()` RPCs.
+
+Both files are safe to re-run. Regenerate `src/lib/types.ts` afterwards:
+
+```bash
+npx supabase gen types typescript --linked > src/lib/types.gen.ts
+```
+
+The hand-maintained `src/lib/types.ts` mirrors the schema; keep the two in step
+when a migration adds a column.
 
 ### 4. Run Development Server
 

@@ -2,28 +2,27 @@ export const APP_NAME = "Voucht";
 export const APP_TAGLINE = "Verifiable Trust Engine for Freelancers & Agencies";
 export const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://voucht.tech";
 
-export const TRUST_TIERS = {
-  ELITE: { min: 90, label: "Elite Verified", color: "#00ff88" },
-  PROVEN: { min: 75, label: "Proven Performer", color: "#38bdf8" },
-  ESTABLISHED: { min: 50, label: "Established", color: "#fbbf24" },
-  NEW: { min: 0, label: "Emerging Talent", color: "#a0a0b8" },
-};
+// Badge tiers and their thresholds live in src/lib/trust-score.ts (BADGE_TIERS),
+// which mirrors the single database implementation of the score.
 
+// Keep this list aligned with canAccess() in src/lib/utils.ts: a line here is
+// only allowed if the code actually gates that feature (or gives it to everyone).
 export const PRICING_PLANS = [
   {
     id: "free",
     name: "Free",
     price: 0,
     interval: "forever",
-    description: "Start building your initial verifiable proof record.",
+    description: "Everything you need to publish your first verified delivery.",
     features: [
-      "1 Active Project",
-      "Public Proof Page (voucht.tech/username)",
-      "Standard Trust Score Calculation",
-      "Client Email Confirmations",
-      "Basic Milestone Ledger",
+      "1 active project",
+      "Public proof page (voucht.tech/username)",
+      "Client confirmation links by email",
+      "Trust Score calculated from confirmed deliveries",
+      "Embeddable trust badge (live SVG)",
+      "Masked client names on every public surface",
     ],
-    cta: "Current Plan",
+    cta: "Start free",
     popular: false,
   },
   {
@@ -31,14 +30,13 @@ export const PRICING_PLANS = [
     name: "Pro",
     price: 10,
     interval: "month",
-    description: "For independent freelancers who win high-ticket clients with proof.",
+    description: "For freelancers running several clients at once.",
     features: [
-      "Unlimited Active Projects & Milestones",
-      "Embeddable Trust Badge (SVG/HTML/React)",
-      "AI Smart Contract Generator (Gemini)",
-      "Priority Client Email Notifications",
-      "Automated Milestone Reminders",
-      "Full Activity Log & Audit Trail",
+      "Everything in Free",
+      "Unlimited projects and milestones",
+      "AI contract drafts you can edit and review",
+      "Automated milestone deadline reminders",
+      "Full activity log of every recorded change",
     ],
     cta: "Upgrade to Pro — $10/mo",
     popular: true,
@@ -48,14 +46,11 @@ export const PRICING_PLANS = [
     name: "Elite",
     price: 29,
     interval: "month",
-    description: "Top 1% freelancers & agencies needing full analytics and guarantees.",
+    description: "Pro plus analytics for your proof page.",
     features: [
       "Everything in Pro",
-      "Profile Views & Audience Analytics",
-      "Zero-Dispute Shield Guarantee Badge",
-      "Custom Domain Support",
-      "NOWPayments Crypto & CREEM Gateways",
-      "Priority 24/7 Concierge Support",
+      "Proof page view counts",
+      "Referrer domains and traffic sources",
     ],
     cta: "Upgrade to Elite — $29/mo",
     popular: false,

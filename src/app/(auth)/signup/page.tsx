@@ -72,7 +72,7 @@ export default function SignupPage() {
             .replace(/[^a-z0-9]/g, "")
             .slice(0, 16) || `user${Math.floor(Math.random() * 10000)}`;
 
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -94,6 +94,19 @@ export default function SignupPage() {
           return;
         }
 
+        // With email confirmation on, signUp returns no session. Sending the
+        // visitor to the dashboard then shows an empty shell that immediately
+        // bounces back to /login.
+        if (!data.session) {
+          toast({
+            title: "Check your inbox",
+            description:
+              "We sent a confirmation link to your email. Open it to activate your account, then log in.",
+          });
+          setLoading(false);
+          return;
+        }
+
         toast({
           title: "Account Created!",
           description: "Welcome to Voucht. Preparing your profile...",
@@ -101,14 +114,13 @@ export default function SignupPage() {
         });
         router.push("/dashboard");
       } else {
-        setTimeout(() => {
-          toast({
-            title: "Account Created!",
-            description: "Your verifiable Voucht workspace is ready.",
-            variant: "success",
-          });
-          router.push("/dashboard");
-        }, 500);
+        toast({
+          title: "Sign up is not available",
+          description:
+            "This deployment has no Supabase project connected yet, so no account can be created.",
+          variant: "destructive",
+        });
+        setLoading(false);
       }
     } catch (err: unknown) {
       const message =
@@ -130,7 +142,7 @@ export default function SignupPage() {
         const { error } = await supabase.auth.signInWithOAuth({
           provider: "google",
           options: {
-            redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+            redirectTo: `${window.location.origin}/callback?next=/dashboard`,
           },
         });
 
@@ -143,14 +155,13 @@ export default function SignupPage() {
           setOauthLoading(false);
         }
       } else {
-        setTimeout(() => {
-          toast({
-            title: "Account created with Google",
-            description: "Proceeding to your Voucht dashboard...",
-            variant: "success",
-          });
-          router.push("/dashboard");
-        }, 500);
+        toast({
+          title: "Sign up is not available",
+          description:
+            "This deployment has no Supabase project connected yet, so Google sign-up cannot start.",
+          variant: "destructive",
+        });
+        setOauthLoading(false);
       }
     } catch (err: unknown) {
       const message =
@@ -179,7 +190,7 @@ export default function SignupPage() {
             Create your account
           </h1>
           <p className="text-sm text-[#a0a0b8] mt-1.5">
-            Join 500+ top freelancers winning with verified trust
+            One account, one public Proof Page at voucht.tech/your-name
           </p>
         </div>
 
@@ -190,7 +201,7 @@ export default function SignupPage() {
               Get Started
             </CardTitle>
             <CardDescription className="text-xs text-[#a0a0b8]">
-              Free forever &bull; No credit card &bull; Setup takes 30 seconds
+              Free forever &bull; No credit card &bull; Upgrade later if you need it
             </CardDescription>
           </CardHeader>
 
@@ -395,6 +406,19 @@ export default function SignupPage() {
             </p>
           </CardFooter>
         </Card>
+
+        <p className="text-[11px] text-[#a0a0b8] text-center leading-relaxed max-w-md mx-auto">
+          By creating an account you agree to our{" "}
+          <Link href="/terms" className="text-[#00ff88] hover:underline">
+            Terms
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="text-[#00ff88] hover:underline">
+            Privacy Policy
+          </Link>
+          . Client email addresses are used to send confirmation links and are
+          never shown publicly.
+        </p>
       </div>
     </div>
   );

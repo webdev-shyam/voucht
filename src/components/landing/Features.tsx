@@ -7,38 +7,38 @@ const FEATURES = [
   {
     icon: Trophy,
     title: "🏆 Trust Score",
-    description: "A verified 0-100 score based on real delivery data. Not reviews. Not endorsements. Proof.",
-    highlight: "Real delivery algorithms",
+    description: "A 0-100 score calculated from recorded, client-confirmed deliveries. Not reviews. Not endorsements. Work.",
+    highlight: "Weighted 40/25/20/15",
   },
   {
     icon: Globe,
     title: "🌐 Public Proof Page",
-    description: "A beautiful, shareable page showing your verified track record. Link it everywhere.",
-    highlight: "Custom shareable link",
+    description: "A shareable page showing your confirmed track record at voucht.tech/your-name. Link it everywhere.",
+    highlight: "One link to share",
   },
   {
     icon: FileText,
-    title: "📄 AI Smart Contracts",
-    description: "Generate professional contracts in 60 seconds. Scope, milestones, payment terms — all AI-powered.",
-    highlight: "60-second generation",
+    title: "📄 AI contract drafts",
+    description: "Turn a project and its milestones into an editable agreement draft: scope, deadlines, payment terms.",
+    highlight: "Pro & Elite · review before sending",
   },
   {
     icon: CheckCircle2,
-    title: "✅ Verified Delivery Receipts",
-    description: "Clients confirm each delivery with one click. Permanent proof you delivered.",
-    highlight: "One-click email tokens",
+    title: "✅ Confirmed deliveries",
+    description: "Clients confirm each delivery with one click from their email, no account needed.",
+    highlight: "Single-use links",
   },
   {
     icon: Award,
-    title: "🏅 Embeddable Trust Badge",
-    description: "Add your Voucht badge to your website, email signature, or portfolio.",
-    highlight: "Live dynamic SVG",
+    title: "🏅 Embeddable trust badge",
+    description: "Add your Voucht badge to your website, GitHub README, or email signature.",
+    highlight: "Live SVG, updates itself",
   },
   {
     icon: BarChart3,
-    title: "📊 Profile Analytics",
-    description: "See who viewed your Proof Page, where they came from, and when.",
-    highlight: "Real-time client intent",
+    title: "📊 Proof page analytics",
+    description: "See how many people opened your proof page, which sites they came from, and when.",
+    highlight: "Elite · visitors stay anonymous",
   },
 ];
 
@@ -48,13 +48,14 @@ export function Features() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="text-center max-w-3xl mx-auto mb-20">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-[#00ff88] uppercase tracking-wider mb-4">
-            Everything You Need To Win
+            What you get
           </div>
           <h2 className="text-3xl sm:text-5xl font-bold text-white tracking-tight mb-4">
             Built for Freelancers Who Actually Ship
           </h2>
           <p className="text-base sm:text-lg text-[#a0a0b8]">
-            Stop competing on price. Let your verified track record close the deal before the first discovery call.
+            Put client-confirmed work in front of prospects before the first
+            discovery call.
           </p>
         </div>
 

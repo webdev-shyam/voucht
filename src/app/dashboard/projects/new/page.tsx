@@ -53,7 +53,6 @@ const newProjectSchema = z.object({
   milestones: z
     .array(milestoneSchema)
     .min(1, "At least one milestone is required"),
-  sendEmailToClient: z.boolean(),
 });
 
 type NewProjectFormValues = z.infer<typeof newProjectSchema>;
@@ -62,15 +61,15 @@ export default function NewProjectPage() {
   const router = useRouter();
   const user = useAppStore((state) => state.user);
   const projects = useAppStore((state) => state.projects);
-  const addProject = useAppStore((state) => state.addProject);
-  const logActivity = useAppStore((state) => state.logActivity);
+  const createProject = useAppStore((state) => state.createProject);
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [submitting, setSubmitting] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const activeProjects = projects.filter((p) => p.status === "active");
-  const isLimitReached = !canAccess(user.tier, "unlimited_projects") && activeProjects.length >= 1;
+  const isLimitReached =
+    !canAccess(user?.tier, "unlimited_projects") && activeProjects.length >= 1;
 
   // Setup default future dates
   const today = new Date();
@@ -91,7 +90,6 @@ export default function NewProjectPage() {
       paymentAmount: 1500,
       currency: "USD",
       deadline: defaultDeadline,
-      sendEmailToClient: true,
       milestones: [
         {
           title: "Initial Deliverable & Architecture",
@@ -162,13 +160,12 @@ export default function NewProjectPage() {
 
   // Submit Handler
   const onSubmit = async (data: NewProjectFormValues) => {
+    if (!user) return;
     setSubmitting(true);
     try {
       const totalBudget = data.paymentAmount || 0;
-      const initialToken = `tok_${Math.random().toString(36).substring(2, 12)}`;
 
-      // 1. Insert into projects with all milestones
-      const createdProject = addProject({
+      const createdProject = await createProject({
         title: data.title,
         description: data.description,
         clientName: data.clientName,
@@ -177,60 +174,37 @@ export default function NewProjectPage() {
         currency: data.currency,
         startDate: new Date().toISOString().split("T")[0],
         deadline: data.deadline,
-        status: "active",
-        clientConfirmed: false,
         milestones: data.milestones.map((m, idx) => ({
-          id: `ms_${Date.now()}_${idx}`,
-          projectId: "",
           title: m.title,
-          description: m.title,
           dueDate: m.dueDate,
           amount: m.amount || totalBudget / data.milestones.length,
-          status: "pending",
-          verificationToken: idx === 0 ? initialToken : `tok_${Math.random().toString(36).substring(2, 12)}`,
+          sortOrder: idx,
         })),
       });
 
-      // 2. Dispatch email to client if checkbox selected
-      if (data.sendEmailToClient) {
-        try {
-          await fetch("/api/email/send-client-confirm", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              to: data.clientEmail,
-              clientName: data.clientName,
-              freelancerName: user.fullName,
-              projectTitle: data.title,
-              milestoneTitle: data.milestones[0]?.title || "Project Milestone Kickoff",
-              token: initialToken,
-            }),
-          });
-        } catch (emailErr) {
-          console.warn("Client email dispatch skipped or non-fatal:", emailErr);
-        }
+      if (!createdProject) {
+        toast({
+          title: "Project not created",
+          description:
+            useAppStore.getState().error ??
+            "We couldn't save this project. Check the details and try again.",
+          variant: "destructive",
+        });
+        setSubmitting(false);
+        return;
       }
 
-      // 3. Log activity: "Created project '{title}'"
-      logActivity({
-        title: `Created project '${data.title}'`,
-        description: `Initialized project with ${data.milestones.length} milestones for client ${data.clientName}.`,
-        type: "project_created",
-      });
-
-      // 4. Show success toast
       toast({
-        title: "Project created successfully! 🎉",
-        description: `Project "${data.title}" is now active in your dashboard.`,
+        title: "Project created",
+        description: `Project "${createdProject.title}" is now active in your dashboard.`,
       });
 
-      // 5. Redirect to /dashboard/projects/[id]
       router.push(`/dashboard/projects/${createdProject.id}`);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
       toast({
         title: "Failed to create project",
-        description: err.message || "An unexpected error occurred.",
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
       setSubmitting(false);
@@ -644,8 +618,9 @@ export default function NewProjectPage() {
               <div className="p-3 rounded-xl bg-surface border border-surfaceLight flex items-start gap-2.5 text-xs text-textSecondary">
                 <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
                 <p>
-                  Each milestone will be issued an individual one-click verification link for your client.
-                  Milestone deliveries submitted on or before due date increase your On-Time Score.
+                  Each milestone gets its own single-use verification link when you
+                  submit it. Deliveries confirmed on or before the due date raise your
+                  on-time rate.
                 </p>
               </div>
 
@@ -748,28 +723,21 @@ export default function NewProjectPage() {
                 </div>
               </div>
 
-              {/* Checkbox: Send confirmation email to client */}
-              <div className="p-4 rounded-xl bg-navyLight/80 border border-surfaceLight flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-surface border border-surfaceLight text-electric">
-                    <Send className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-white">
-                      Send confirmation email to client
-                    </p>
-                    <p className="text-[11px] text-textSecondary">
-                      Dispatches kickoff milestone sign-off invitation to {formValues.clientEmail}.
-                    </p>
-                  </div>
+              {/* What happens next */}
+              <div className="p-4 rounded-xl bg-navyLight/80 border border-surfaceLight flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-surface border border-surfaceLight text-electric shrink-0">
+                  <Send className="w-4 h-4" />
                 </div>
-
-                <input
-                  type="checkbox"
-                  id="sendEmail"
-                  className="w-4 h-4 accent-[#00ff88] rounded cursor-pointer"
-                  {...register("sendEmailToClient")}
-                />
+                <div>
+                  <p className="text-xs font-bold text-white">
+                    Verification links are sent when you deliver
+                  </p>
+                  <p className="text-[11px] text-textSecondary mt-0.5">
+                    Nothing is emailed to {formValues.clientEmail} yet. When you mark
+                    a milestone complete, Voucht generates a single-use link for your
+                    client to confirm that delivery.
+                  </p>
+                </div>
               </div>
 
               {/* Action Buttons */}

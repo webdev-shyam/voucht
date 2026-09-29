@@ -54,13 +54,13 @@ export function Navbar() {
               {link.label}
             </a>
           ))}
-          <Link
-            href="/profile/alexrivera"
+          <a
+            href="#example-proof"
             className="hover:text-[#00ff88] transition-colors flex items-center gap-1.5"
           >
             <ShieldCheck className="w-4 h-4 text-[#00ff88]" />
-            <span>Sample Proof</span>
-          </Link>
+            <span>Example Proof</span>
+          </a>
         </nav>
 
         {/* Right side CTAs */}
@@ -112,14 +112,14 @@ export function Navbar() {
                       {link.label}
                     </a>
                   ))}
-                  <Link
-                    href="/profile/alexrivera"
+                  <a
+                    href="#example-proof"
                     onClick={() => setMobileOpen(false)}
                     className="text-lg font-medium text-[#00ff88] hover:underline transition-colors py-2 flex items-center gap-2 border-b border-white/5"
                   >
                     <ShieldCheck className="w-5 h-5 text-[#00ff88]" />
-                    <span>Sample Proof Page</span>
-                  </Link>
+                    <span>Example Proof Page</span>
+                  </a>
                 </nav>
               </div>
 

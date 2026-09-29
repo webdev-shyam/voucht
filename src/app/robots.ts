@@ -7,7 +7,9 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/api/", "/dashboard/settings/"],
+      // The whole dashboard is private, session-scoped data — nothing there
+      // should be crawled, even the parts a logged-out visitor cannot reach.
+      disallow: ["/api/", "/dashboard"],
     },
     sitemap: `${baseUrl}/sitemap.xml`,
   };

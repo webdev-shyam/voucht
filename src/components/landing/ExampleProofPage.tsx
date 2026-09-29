@@ -1,168 +1,151 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, ExternalLink, ShieldCheck, Sparkles, Clock, Lock } from "lucide-react";
-import { PublicTrustScore } from "@/components/profile/PublicTrustScore";
-import { UserProfile, TrustScoreFactors } from "@/lib/types";
+import { ArrowRight, CheckCircle2, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-const MOCK_USER: UserProfile = {
-  id: "alex-sample-id",
-  email: "alex@riveradesign.co",
-  username: "alexrivera",
-  fullName: "Alex Rivera",
-  avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
-  headline: "Principal Systems Architect & Next.js Engineer",
-  bio: "10+ years shipping mission-critical fintech web applications. I deliver early, communicate proactively, and never leave codebases undocumented.",
-  role: "freelancer",
-  trustScore: 96,
-  tier: "pro",
-  createdAt: "2024-01-15T00:00:00Z",
-  verifiedDeliveriesCount: 38,
-  onTimeRate: 98,
-  clientSatisfactionScore: 99,
-  badgeTier: "exceptional",
-  location: "San Francisco, CA",
-  skill: "Developer",
-};
-
-const MOCK_FACTORS: TrustScoreFactors = {
-  overallScore: 96,
-  onTimeDelivery: 98,
-  clientConfirmations: 95,
-  disputeRate: 100,
-  platformLongevity: 92,
-  badges: ["Elite Verified", "100% Delivery Rate", "Fast Responder"],
-};
-
-const MOCK_DELIVERIES = [
+// Illustrative only: this is a drawing of what a proof page looks like, not a
+// real freelancer, real client or real delivery record. It is labelled as such
+// on the page and must stay that way.
+const EXAMPLE_DELIVERIES = [
   {
-    title: "SOC-2 Compliant Authentication & Session Ledger",
-    client: "FinVault Global",
-    completedDate: "2 days ago",
-    hash: "0x8f2a...4b9c",
-    status: "Verified by Client VP of Eng",
-    amount: "$8,500",
+    id: "e1",
+    title: "Marketing site rebuild",
+    clientLabel: "J***n D.",
+    timingLabel: "3 days early",
+    confirmedLabel: "Mar 2026",
   },
   {
-    title: "High-Throughput Webhook Processing Pipeline",
-    client: "OmniCart Commerce",
-    completedDate: "2 weeks ago",
-    hash: "0x3e1d...7a0f",
-    status: "Verified by Founder & CTO",
-    amount: "$12,000",
+    id: "e2",
+    title: "Booking dashboard, phase 2",
+    clientLabel: "P***a K.",
+    timingLabel: "On time",
+    confirmedLabel: "Feb 2026",
   },
   {
-    title: "Design System & React Component Library v2",
-    client: "Prism Health",
-    completedDate: "1 month ago",
-    hash: "0x9c4b...112e",
-    status: "Verified by Lead Product Manager",
-    amount: "$6,200",
+    id: "e3",
+    title: "API integration & handover",
+    clientLabel: "R***b S.",
+    timingLabel: "On time",
+    confirmedLabel: "Jan 2026",
   },
 ];
 
 export function ExampleProofPage() {
   return (
     <section id="example-proof" className="py-24 bg-[#1a1a2e]/90 border-t border-white/5 relative overflow-hidden">
-      {/* Background glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-[#00ff88]/5 blur-[160px] rounded-full pointer-events-none -z-10" />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-[#00ff88] uppercase tracking-wider mb-4">
-            Live Client View
+            What your proof page looks like
           </div>
           <h2 className="text-3xl sm:text-5xl font-bold text-white tracking-tight mb-4">
-            The Verified Proof Page
+            One link that proves you deliver
           </h2>
           <p className="text-base sm:text-lg text-[#a0a0b8]">
-            Share your custom Voucht link on Upwork, cold outreach emails, Notion proposals, and X.
+            Put it in your proposal, your Upwork profile or your email signature. Every milestone on
+            it was confirmed by the client who received it.
           </p>
         </div>
 
-        {/* Mock browser frame */}
-        <div className="rounded-2xl border border-white/15 bg-[#1a1a2e] shadow-2xl overflow-hidden">
-          {/* Browser header bar */}
-          <div className="px-4 py-3 bg-[#1e1e3f] border-b border-white/10 flex items-center justify-between">
+        <div className="rounded-2xl border border-white/15 bg-[#1a1a2e] shadow-2xl overflow-hidden relative">
+          <div className="absolute -top-0 right-0 z-10">
+            <Badge
+              variant="outline"
+              className="rounded-none rounded-bl-xl border-white/15 bg-black/60 text-[10px] uppercase tracking-wider text-[#a0a0b8] px-3 py-1"
+            >
+              Illustrative example
+            </Badge>
+          </div>
+
+          <div className="px-4 py-3 bg-[#1e1e3f] border-b border-white/10 flex items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-red-500/70" />
               <span className="w-3 h-3 rounded-full bg-yellow-500/70" />
               <span className="w-3 h-3 rounded-full bg-green-500/70" />
             </div>
-
-            <div className="flex items-center gap-2 px-4 py-1 rounded-lg bg-black/30 border border-white/10 text-xs text-[#a0a0b8] font-mono">
-              <Lock className="w-3 h-3 text-[#00ff88]" />
-              <span>voucht.tech/profile/alexrivera</span>
+            <div className="flex-1 text-center">
+              <span className="inline-block px-4 py-1 rounded-lg bg-black/30 border border-white/10 text-xs text-[#a0a0b8] font-mono">
+                voucht.tech/profile/your-name
+              </span>
             </div>
-
-            <Button asChild variant="ghost" size="sm" className="text-xs text-[#a0a0b8] hover:text-white h-7 px-2">
-              <Link href="/profile/alexrivera" target="_blank">
-                <ExternalLink className="w-3.5 h-3.5" />
-              </Link>
-            </Button>
           </div>
 
-          {/* Browser Content */}
-          <div className="p-4 sm:p-8 bg-[#1a1a2e] space-y-8">
-            {/* Reusing the PublicTrustScore component */}
-            <PublicTrustScore user={MOCK_USER} factors={MOCK_FACTORS} />
-
-            {/* Verified Delivery Receipts Ledger */}
-            <div className="p-6 sm:p-8 rounded-2xl border border-white/10 bg-[#1e1e3f]/80 backdrop-blur-sm">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2.5">
-                  <ShieldCheck className="w-5 h-5 text-[#00ff88]" />
-                  <h3 className="text-lg font-bold text-white">
-                    Verified Milestone Deliveries
-                  </h3>
-                </div>
-                <span className="text-xs font-mono text-[#00ff88] bg-[#00ff88]/10 px-2.5 py-1 rounded-full border border-[#00ff88]/20">
-                  Cryptographically Hashed
-                </span>
+          <div className="p-4 sm:p-8 bg-[#1a1a2e] space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+              <div>
+                <p className="text-[11px] uppercase tracking-widest text-[#a0a0b8] font-mono">
+                  Trust Score
+                </p>
+                <p className="text-4xl font-black text-white font-mono mt-1">
+                  92<span className="text-lg text-[#a0a0b8]">/100</span>
+                </p>
+                <p className="text-xs text-[#a0a0b8] mt-1">Highly reliable · example data</p>
               </div>
 
-              <div className="space-y-3">
-                {MOCK_DELIVERIES.map((item, i) => (
-                  <div
-                    key={i}
-                    className="p-4 rounded-xl border border-white/5 bg-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-white/10 transition-colors"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-white">{item.title}</span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-[#a0a0b8]">
-                        <span className="text-white/90 font-medium">{item.client}</span>
-                        <span>&bull;</span>
-                        <span>{item.completedDate}</span>
-                        <span>&bull;</span>
-                        <span className="font-mono text-[11px] text-[#a0a0b8]/80">{item.hash}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between sm:justify-end gap-3 text-right">
-                      <span className="text-sm font-mono font-bold text-white">{item.amount}</span>
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-[#00ff88] bg-[#00ff88]/10 px-2.5 py-1 rounded-full">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Verified
-                      </span>
-                    </div>
+              <div className="grid grid-cols-3 gap-3 text-center">
+                {[
+                  { label: "Delivered", value: "18" },
+                  { label: "On time", value: "94%" },
+                  { label: "Confirmed", value: "18" },
+                ].map((stat) => (
+                  <div key={stat.label} className="px-4 py-3 rounded-xl bg-white/5 border border-white/10">
+                    <p className="text-xl font-black font-mono text-white">{stat.value}</p>
+                    <p className="text-[11px] text-[#a0a0b8]">{stat.label}</p>
                   </div>
                 ))}
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Caption */}
-        <div className="mt-8 text-center">
-          <p className="text-base sm:text-lg font-medium text-white">
-            &ldquo;This is what your clients see. Impressive, right?&rdquo;
-          </p>
-          <p className="text-xs sm:text-sm text-[#a0a0b8] mt-1">
-            Zero fake reviews. Real delivered milestones backed by client digital signatures.
-          </p>
+            <div className="p-5 sm:p-6 rounded-2xl border border-white/10 bg-[#1e1e3f]/80">
+              <div className="flex items-center gap-2.5 mb-4">
+                <ShieldCheck className="w-5 h-5 text-[#00ff88]" />
+                <h3 className="text-base font-bold text-white">Verified deliveries</h3>
+              </div>
+
+              <div className="space-y-2.5">
+                {EXAMPLE_DELIVERIES.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-3.5 rounded-xl border border-white/5 bg-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-[#00ff88] mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-white">{item.title}</p>
+                        <p className="text-xs text-[#a0a0b8] mt-0.5">
+                          Client: {item.clientLabel} &bull; {item.timingLabel}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[11px] font-mono text-[#00ff88] shrink-0">
+                      Confirmed {item.confirmedLabel}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-[11px] text-[#a0a0b8] mt-4">
+                Client names are masked. Emails, contracts and payment details are never shown
+                publicly.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+              <p className="text-sm text-white font-medium">
+                Your real proof page shows only your confirmed deliveries — nothing is added for
+                effect.
+              </p>
+              <Button asChild variant="electric" size="sm" className="font-bold shrink-0">
+                <Link href="/signup">
+                  Create my proof page <ArrowRight className="w-4 h-4 ml-1.5" />
+                </Link>
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </section>

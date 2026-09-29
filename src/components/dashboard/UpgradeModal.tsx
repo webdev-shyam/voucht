@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useAppStore } from "@/store/useAppStore";
 import { toast } from "@/components/ui/use-toast";
 
 interface UpgradeModalProps {
@@ -40,70 +39,74 @@ export function UpgradeModal({
   description,
 }: UpgradeModalProps) {
   const router = useRouter();
-  const user = useAppStore((state) => state.user);
   const [selectedPlan, setSelectedPlan] = useState<"pro" | "elite">("pro");
   const [loadingProvider, setLoadingProvider] = useState<"creem" | "nowpayments" | null>(null);
 
   const getFeatureHeading = () => {
     if (title) return title;
-    if (feature === "unlimited_projects") return "Unlock Unlimited Projects";
-    if (feature === "trust_badge") return "Unlock Your Dynamic SVG Trust Badge";
-    if (feature === "smart_contracts") return "Unlock AI Smart Contracts";
-    if (feature === "profile_analytics") return "Unlock Profile Views & Analytics";
+    if (feature === "unlimited_projects") return "Unlock unlimited projects";
+    if (feature === "smart_contracts") return "Unlock AI contract drafts";
+    if (feature === "profile_analytics") return "Unlock proof page analytics";
     return "Upgrade to Voucht Pro or Elite";
   };
 
   const getFeatureSubtitle = () => {
     if (description) return description;
     if (feature === "unlimited_projects")
-      return "Free plan allows 1 active project. Upgrade to manage unlimited concurrent clients and build your verified delivery history.";
-    if (feature === "trust_badge")
-      return "Embed a live, verified SVG badge into your GitHub README, portfolio, and website with dynamic trust score caching.";
+      return "The free plan keeps 1 active project. Upgrade to track several clients at once and build a confirmed delivery history.";
     if (feature === "smart_contracts")
-      return "Generate legally structured client service agreements with milestone sign-off clauses in seconds.";
+      return "Draft a client agreement with scope, milestones and payment terms in seconds. It is a starting point you review and edit, not legal advice.";
     if (feature === "profile_analytics")
-      return "Track which clients view your verified proof page, view referral traffic sources, and monitor engagement trends.";
-    return "Scale your verifiable freelance reputation with unlimited projects, badges, and automated sign-offs.";
+      return "See how many people viewed your proof page, where they came from, and which days. Visitors stay anonymous: we count views, we do not identify people.";
+    return "Track more clients at once, embed your badge, and draft contracts faster.";
   };
 
   const handleCheckout = async (provider: "creem" | "nowpayments") => {
     setLoadingProvider(provider);
 
-    try {
-      const endpoint =
-        provider === "creem" ? "/api/checkout/creem" : "/api/checkout/nowpayments";
+    const endpoint =
+      provider === "creem" ? "/api/checkout/creem" : "/api/checkout/nowpayments";
 
+    // Only a URL the server actually returned can open a checkout. A failed
+    // request must never land on the billing page looking like a paid account.
+    try {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          plan: selectedPlan,
-          userId: user.id,
-          email: user.email,
-        }),
+        body: JSON.stringify({ plan: selectedPlan }),
       });
 
-      const data = await res.json();
-      const redirectUrl = data.checkoutUrl || data.invoiceUrl;
+      const data = await res.json().catch(() => null);
+      const redirectUrl =
+        typeof data?.checkoutUrl === "string" && data.checkoutUrl.length > 0
+          ? data.checkoutUrl
+          : null;
 
-      if (redirectUrl) {
-        onOpenChange(false);
-        if (redirectUrl.startsWith("/")) {
-          router.push(redirectUrl);
-        } else {
-          window.location.href = redirectUrl;
-        }
-      } else {
-        throw new Error(data.error || "Failed to initialize payment gateway.");
+      if (!res.ok || !redirectUrl) {
+        toast({
+          title: "Checkout unavailable",
+          description:
+            data?.error ||
+            "We could not reach the payment provider. No payment was taken and your plan is unchanged.",
+          variant: "destructive",
+        });
+        return;
       }
-    } catch (err: any) {
+
+      onOpenChange(false);
+      if (redirectUrl.startsWith("/")) {
+        router.push(redirectUrl);
+      } else {
+        window.location.href = redirectUrl;
+      }
+    } catch (err) {
       console.error("Checkout launch error:", err);
       toast({
-        title: "Checkout Notice",
-        description: err.message || "Redirecting to billing portal...",
+        title: "Checkout unavailable",
+        description:
+          "We could not reach the payment provider. No payment was taken and your plan is unchanged.",
+        variant: "destructive",
       });
-      onOpenChange(false);
-      router.push(`/dashboard/billing?success=true&provider=${provider}&plan=${selectedPlan}`);
     } finally {
       setLoadingProvider(null);
     }
@@ -156,7 +159,7 @@ export function UpgradeModal({
                 <span className="text-xs text-textSecondary font-mono ml-1.5">/month</span>
               </div>
               <p className="text-[11px] text-textSecondary mt-1">
-                Unlimited projects, SVG Trust Badges & AI Smart Contracts.
+                Unlimited projects, AI contract drafts and deadline reminders.
               </p>
             </div>
 
@@ -183,7 +186,7 @@ export function UpgradeModal({
                 <span className="text-xs text-textSecondary font-mono ml-1.5">/month</span>
               </div>
               <p className="text-[11px] text-textSecondary mt-1">
-                Profile analytics, dispute shielding & directory indexing.
+                Everything in Pro, plus proof page view analytics.
               </p>
             </div>
           </div>
@@ -200,25 +203,25 @@ export function UpgradeModal({
               </div>
               <div className="flex items-center gap-2 text-slate-200">
                 <Check className="w-4 h-4 text-electric shrink-0" />
-                <span>Dynamic SVG Trust Badges</span>
+                <span>AI contract drafts you edit and send</span>
               </div>
               <div className="flex items-center gap-2 text-slate-200">
                 <Check className="w-4 h-4 text-electric shrink-0" />
-                <span>AI Smart Contracts with sign-offs</span>
+                <span>Automated milestone deadline reminders</span>
               </div>
               <div className="flex items-center gap-2 text-slate-200">
                 <Check className="w-4 h-4 text-electric shrink-0" />
-                <span>Automated milestone reminders</span>
+                <span>Full activity log of recorded changes</span>
               </div>
               {selectedPlan === "elite" && (
                 <>
                   <div className="flex items-center gap-2 text-slate-200">
                     <Check className="w-4 h-4 text-electric shrink-0" />
-                    <span>Profile views & visitor analytics</span>
+                    <span>Proof page view counts</span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-200">
                     <Check className="w-4 h-4 text-electric shrink-0" />
-                    <span>Dispute Shield & priority ledger</span>
+                    <span>Referrer domains and traffic sources</span>
                   </div>
                 </>
               )}
@@ -265,11 +268,11 @@ export function UpgradeModal({
             </div>
           </div>
 
-          {/* Guarantee banner */}
+          {/* Billing note */}
           <div className="text-center pt-1 pb-1">
             <p className="text-[11px] text-textSecondary flex items-center justify-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>30-day money-back guarantee · Cancel anytime</span>
+              <span>Billed in 30-day periods &middot; cancel from your billing page</span>
             </p>
           </div>
         </div>

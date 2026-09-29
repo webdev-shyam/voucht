@@ -8,7 +8,6 @@ import {
   Eye,
   FolderKanban,
   Sparkles,
-  TrendingUp,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,22 +18,24 @@ import { UpgradeModal } from "@/components/dashboard/UpgradeModal";
 interface StatsCardsProps {
   totalProjects: number;
   completedCount: number;
-  onTimeRate: number;
-  profileViews?: number;
+  // null until a client confirms a delivery: there is no on-time rate to report.
+  onTimeRate: number | null;
+  // null when the plan does not include visitor analytics.
+  profileViews: number | null;
 }
 
 export function StatsCards({
   totalProjects,
   completedCount,
   onTimeRate,
-  profileViews = 342,
+  profileViews,
 }: StatsCardsProps) {
   const user = useAppStore((state) => state.user);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const hasAnalyticsAccess = canAccess(user.tier, "profile_analytics");
+  const hasAnalyticsAccess = canAccess(user?.tier, "profile_analytics");
 
   const completionRate =
-    totalProjects > 0 ? Math.round((completedCount / totalProjects) * 100) : 100;
+    totalProjects > 0 ? Math.round((completedCount / totalProjects) * 100) : 0;
 
   return (
     <>
@@ -61,9 +62,8 @@ export function StatsCards({
                   {totalProjects}
                 </h3>
               </div>
-              <div className="mt-2 flex items-center gap-1.5 text-xs text-electric">
-                <TrendingUp className="w-3.5 h-3.5" />
-                <span className="font-semibold">↑2 this month</span>
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-textSecondary">
+                <span className="font-semibold">On Voucht</span>
               </div>
             </CardContent>
           </Card>
@@ -118,18 +118,24 @@ export function StatsCards({
               <div className="mt-2 flex items-baseline gap-2">
                 <h3
                   className={`text-3xl font-extrabold font-mono ${
-                    onTimeRate >= 90
+                    onTimeRate === null
+                      ? "text-textSecondary"
+                      : onTimeRate >= 90
                       ? "text-electric"
                       : onTimeRate >= 75
                       ? "text-sky-400"
                       : "text-amber-400"
                   }`}
                 >
-                  {onTimeRate}%
+                  {onTimeRate === null ? "—" : `${Math.round(onTimeRate)}%`}
                 </h3>
               </div>
               <div className="mt-2 flex items-center gap-1.5 text-xs text-textSecondary">
-                <span className="text-sky-400 font-semibold">Strict SLA verification</span>
+                <span>
+                  {onTimeRate === null
+                    ? "Appears after a confirmed delivery"
+                    : "Of client-confirmed deliveries"}
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -157,40 +163,31 @@ export function StatsCards({
                 <>
                   <div className="mt-2 flex items-baseline gap-2">
                     <h3 className="text-3xl font-extrabold text-white font-mono">
-                      {profileViews}
+                      {profileViews ?? "—"}
                     </h3>
                   </div>
                   <div className="mt-2 flex items-center gap-1.5 text-xs text-indigo-400">
-                    <TrendingUp className="w-3.5 h-3.5" />
-                    <span className="font-semibold">+18% this week</span>
+                    <Eye className="w-3.5 h-3.5" />
+                    <span className="font-semibold">
+                      {profileViews === null ? "Counting visits since today" : "Total visits"}
+                    </span>
                   </div>
                 </>
               ) : (
-                <div className="relative mt-2">
-                  {/* Blurred teaser metric */}
-                  <div className="filter blur-[3px] select-none opacity-40">
-                    <div className="text-3xl font-extrabold text-white font-mono">
-                      342
-                    </div>
-                    <div className="mt-2 flex items-center gap-1.5 text-xs text-indigo-400">
-                      <TrendingUp className="w-3.5 h-3.5" />
-                      <span>+18% this week</span>
-                    </div>
-                  </div>
-
-                  {/* Clean overlay */}
-                  <div className="absolute inset-0 -top-2 flex flex-col items-center justify-center text-center">
-                    <Button
-                      size="sm"
-                      variant="electric"
-                      onClick={() => setShowUpgradeModal(true)}
-                      className="h-8 text-[11px] font-bold gap-1 px-3 shadow-md bg-electric text-navy hover:bg-electric/90"
-                    >
-                      <Sparkles className="w-3 h-3" />
-                      <span>Upgrade to Elite</span>
-                    </Button>
-                    <span className="text-[10px] text-textSecondary mt-1">Unlock Visitor Analytics</span>
-                  </div>
+                <div className="mt-2 flex flex-col gap-2">
+                  <h3 className="text-3xl font-extrabold text-white font-mono">Elite</h3>
+                  <Button
+                    size="sm"
+                    variant="electric"
+                    onClick={() => setShowUpgradeModal(true)}
+                    className="h-8 text-[11px] font-bold gap-1 px-3 shadow-md bg-electric text-navy hover:bg-electric/90 self-start"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Upgrade to Elite</span>
+                  </Button>
+                  <span className="text-[10px] text-textSecondary">
+                    Elite plans count who views your proof page.
+                  </span>
                 </div>
               )}
             </CardContent>

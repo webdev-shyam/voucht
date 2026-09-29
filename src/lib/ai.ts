@@ -21,7 +21,12 @@ export interface ContractGenerationParams {
   milestonesSummary: string;
 }
 
+// Which generator produced a draft, so the UI can describe it accurately
+// instead of labelling a deterministic fallback "AI generated".
+export type ContractProvider = "gemini" | "openrouter" | "template";
+
 export async function generateSmartContract(params: ContractGenerationParams): Promise<{
+  provider: ContractProvider;
   title: string;
   scopeOfWork: string;
   paymentTerms: string;
@@ -57,6 +62,7 @@ Return the contract in clean markdown format.`;
 
       const text = response.text || "";
       return {
+        provider: "gemini",
         title: `Master Services Agreement - ${params.projectTitle}`,
         scopeOfWork: params.scopeOfWork,
         paymentTerms: `Total of ${params.currency} ${params.totalBudget} payable upon completion and verified sign-off of deliverables. Net 7 payment terms.`,
@@ -87,6 +93,7 @@ Return the contract in clean markdown format.`;
       const data = await res.json();
       const content = data.choices?.[0]?.message?.content || "";
       return {
+        provider: "openrouter",
         title: `Master Services Agreement - ${params.projectTitle}`,
         scopeOfWork: params.scopeOfWork,
         paymentTerms: `Total of ${params.currency} ${params.totalBudget} payable upon milestone acceptance.`,
@@ -101,11 +108,12 @@ Return the contract in clean markdown format.`;
 
   // Standalone robust template fallback
   return {
+    provider: "template",
     title: `Master Services Agreement - ${params.projectTitle}`,
     scopeOfWork: params.scopeOfWork || "Design, development, and delivery of verified milestone deliverables.",
     paymentTerms: `Total compensation of ${params.currency} ${params.totalBudget}. Each milestone requires client digital confirmation on Voucht. Net 7 days from verification.`,
     ipClause: `Upon receipt of full payment, all custom code, assets, and design deliverables are assigned to ${params.clientName}. Pre-existing developer toolkits remain property of ${params.freelancerName}.`,
     terminationTerms: `Either party may terminate upon 14 days written notice. Completed milestones will be paid in full.`,
-    fullMarkdown: `# Master Services Agreement: ${params.projectTitle}\n\n**Provider:** ${params.freelancerName}\n**Client:** ${params.clientName}\n**Total Budget:** ${params.currency} ${params.totalBudget}\n\n### 1. Scope of Work\n${params.scopeOfWork}\n\n### 2. Milestone Structure\n${params.milestonesSummary}\n\n### 3. Payment Terms\nInvoices are triggered automatically upon digital client verification on the Voucht Trust Engine.\n\n### 4. Intellectual Property\nAll custom deliverables become exclusive property of the Client upon 100% full payment clearance.\n\n### 5. Dispute Shield\nBoth parties agree to submit unresolved discrepancies to Voucht peer verification prior to litigation.`,
+    fullMarkdown: `# Master Services Agreement: ${params.projectTitle}\n\n> Draft generated from a template. Not reviewed by a lawyer; have counsel of your own review it before signing.\n\n**Provider:** ${params.freelancerName}\n**Client:** ${params.clientName}\n**Total Budget:** ${params.currency} ${params.totalBudget}\n\n### 1. Scope of Work\n${params.scopeOfWork}\n\n### 2. Milestone Structure\n${params.milestonesSummary}\n\n### 3. Payment Terms\nEach milestone is invoiced on delivery and treated as accepted when the Client confirms it on Voucht. Payment is due within 7 days of acceptance.\n\n### 4. Intellectual Property\nCustom deliverables become the Client's property once the corresponding invoice is paid in full. Pre-existing tools and libraries stay with the Provider.\n\n### 5. Dispute Resolution\nThe parties attempt good-faith resolution first. Voucht delivery records may be shared as evidence of what was confirmed, but Voucht is not an arbitrator, a party to this agreement, or a provider of legal advice.`,
   };
 }

@@ -1,10 +1,6 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { headers } from "next/headers";
 import Link from "next/link";
-
-// Implement ISR for public proof page (revalidate every 3600 seconds)
-export const revalidate = 3600;
 import {
   CheckCircle2,
   ExternalLink,
@@ -12,7 +8,6 @@ import {
   Globe,
   Linkedin,
   MapPin,
-  MessageSquare,
   PackageCheck,
   ShieldCheck,
   Sparkles,
@@ -22,290 +17,162 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Logo } from "@/components/shared/Logo";
 import { ProofCircularScore } from "@/components/profile/ProofCircularScore";
+import { ProfileViewBeacon } from "@/components/profile/ProfileViewBeacon";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { badgeFor, formatTrustScore, TRUST_SCORE_WEIGHTS } from "@/lib/trust-score";
+import { badgeImageUrl, proofPageUrl } from "@/lib/utils";
+import type { Database } from "@/lib/types";
 
-// Mask client name for privacy: "Samantha Jones" -> "S***a J."
-function maskClientName(name: string): string {
-  if (!name || name.trim().length === 0) return "C***t";
-  const trimmed = name.trim();
-  const parts = trimmed.split(" ");
-  if (parts.length === 1) {
-    const single = parts[0];
-    if (single.length <= 2) return `${single[0]}*`;
-    return `${single[0]}${"*".repeat(Math.min(single.length - 2, 3))}${single[single.length - 1]}`;
-  }
-  const first = parts[0];
-  const last = parts[parts.length - 1];
-  const maskedFirst =
-    first.length > 2
-      ? `${first[0]}${"*".repeat(Math.min(first.length - 2, 3))}${first[first.length - 1]}`
-      : `${first[0]}*`;
-  return `${maskedFirst} ${last[0]}.`;
-}
+// Public proof pages render a read-only projection of the database, so they are
+// cached and regenerated hourly. Nothing per-visitor is read during render:
+// view telemetry is reported from the browser by ProfileViewBeacon.
+export const revalidate = 3600;
+
+type ProfileRow = Database["public"]["Views"]["public_profiles"]["Row"];
+type DeliveryRow = Database["public"]["Views"]["public_deliveries"]["Row"];
 
 interface ProfilePageProps {
   params: { username: string };
 }
 
-// Default fallback data for preview or non-seeded environments
-const fallbackProfiles: Record<string, any> = {
-  alexrivera: {
-    id: "prof_alex_1",
-    username: "alexrivera",
-    full_name: "Alex Rivera",
-    skill: "Senior Full-Stack Engineer & Smart Contract Developer",
-    bio: "Building high-performance Next.js web applications, DeFi integrations, and verifiable digital infrastructure for venture-backed technology startups. 100% on-time milestone delivery track record.",
-    location: "San Francisco, CA",
-    website: "https://riveradesign.co",
-    linkedin_url: "https://linkedin.com/in/alexrivera-tech",
-    avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80",
-    trust_score: 94,
-    total_projects: 24,
-    completed_projects: 23,
-    on_time_rate: 96,
-    avg_response_hours: 1.4,
-    ghost_rate: 0,
-    badge_tier: "exceptional",
-  },
-};
-
-const fallbackDeliveries = [
-  {
-    id: "del_1",
-    project_title: "Aura Pay - Mobile Banking App",
-    client_name: "Samantha Jones",
-    delivery_date: "Oct 15, 2026",
-    delivery_status_label: "On time · Oct 15, 2026",
-    confirmation_date: "✅ Yes · Oct 16, 2026",
-    is_on_time: true,
-  },
-  {
-    id: "del_2",
-    project_title: "Orbit Analytics SaaS Dashboard",
-    client_name: "Marcus Vance",
-    delivery_date: "Sep 28, 2026",
-    delivery_status_label: "1 day early · Sep 28, 2026",
-    confirmation_date: "✅ Yes · Sep 29, 2026",
-    is_on_time: true,
-  },
-  {
-    id: "del_3",
-    project_title: "Veritas AI Model Training Portal",
-    client_name: "David Chen",
-    delivery_date: "Aug 14, 2026",
-    delivery_status_label: "On time · Aug 14, 2026",
-    confirmation_date: "✅ Yes · Aug 15, 2026",
-    is_on_time: true,
-  },
-  {
-    id: "del_4",
-    project_title: "Solana Escrow Smart Contract Suite",
-    client_name: "Elena Rostova",
-    delivery_date: "Jul 03, 2026",
-    delivery_status_label: "On time · Jul 03, 2026",
-    confirmation_date: "✅ Yes · Jul 04, 2026",
-    is_on_time: true,
-  },
-];
-
-async function getProfileData(username: string) {
-  const normalized = username.toLowerCase();
-
-  if (!isSupabaseConfigured()) {
-    const profile = fallbackProfiles[normalized] || {
-      ...fallbackProfiles.alexrivera,
-      username: normalized,
-      full_name: normalized.charAt(0).toUpperCase() + normalized.slice(1),
-    };
-    return { profile, deliveries: fallbackDeliveries };
-  }
-
-  try {
-    const supabase: any = createAdminClient();
-
-    // 1. Fetch profile
-    const profileRes = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("username", normalized)
-      .maybeSingle();
-
-    const profile: any = profileRes?.data;
-
-    if (!profile) {
-      if (fallbackProfiles[normalized]) {
-        return { profile: fallbackProfiles[normalized], deliveries: fallbackDeliveries };
-      }
-      return null;
-    }
-
-    // 2. Fetch confirmed deliveries
-    const deliveriesRes = await supabase
-      .from("deliveries")
-      .select(`
-        id,
-        delivery_type,
-        was_on_time,
-        days_early_or_late,
-        client_name,
-        client_confirmed,
-        client_confirmed_at,
-        created_at,
-        projects (
-          title
-        )
-      `)
-      .eq("freelancer_id", profile.id)
-      .eq("client_confirmed", true)
-      .order("created_at", { ascending: false });
-
-    const deliveriesData: any = deliveriesRes?.data;
-
-    const formattedDeliveries = (deliveriesData || []).map((d: any) => {
-      const projectTitle = d.projects?.title || "Contract Deliverable";
-      const created = new Date(d.created_at).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      });
-      const confirmed = d.client_confirmed_at
-        ? new Date(d.client_confirmed_at).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })
-        : created;
-
-      let timingText = "On time";
-      if (d.days_early_or_late < 0) {
-        timingText = `${Math.abs(d.days_early_or_late)} day${Math.abs(d.days_early_or_late) > 1 ? "s" : ""} early`;
-      } else if (d.days_early_or_late > 0) {
-        timingText = `${d.days_early_or_late} day${d.days_early_or_late > 1 ? "s" : ""} late`;
-      }
-
-      return {
-        id: d.id,
-        project_title: projectTitle,
-        client_name: d.client_name,
-        delivery_status_label: `${timingText} · ${created}`,
-        confirmation_date: `✅ Yes · ${confirmed}`,
-        is_on_time: d.was_on_time,
-      };
-    });
-
-    return {
-      profile,
-      deliveries: formattedDeliveries.length > 0 ? formattedDeliveries : fallbackDeliveries,
-    };
-  } catch (error) {
-    console.error("Error fetching public profile:", error);
-    return {
-      profile: fallbackProfiles[normalized] || fallbackProfiles.alexrivera,
-      deliveries: fallbackDeliveries,
-    };
-  }
+interface ProofDelivery {
+  id: string;
+  title: string;
+  clientLabel: string;
+  timingLabel: string;
+  deliveredLabel: string;
+  confirmedLabel: string;
+  isOnTime: boolean;
 }
 
-// Log profile view in profile_views table
-async function logProfileView(profileId: string) {
-  if (!isSupabaseConfigured() || !profileId) return;
-
-  try {
-    const headerList = headers();
-    const visitorIp =
-      headerList.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      headerList.get("x-real-ip") ||
-      "127.0.0.1";
-    const referrer = headerList.get("referer") || "direct";
-
-    const supabase: any = createAdminClient();
-    await supabase.from("profile_views").insert({
-      freelancer_id: profileId,
-      visitor_ip: visitorIp,
-      referrer,
-    });
-  } catch {
-    // Non-blocking telemetry
-  }
+interface ProofData {
+  profile: ProfileRow;
+  deliveries: ProofDelivery[];
 }
 
-// SEO & Social Sharing Metadata
+function dateLabel(iso: string | null): string {
+  if (!iso) return "—";
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function timingLabel(daysEarlyOrLate: number): string {
+  const days = daysEarlyOrLate ?? 0;
+  if (days < 0) return `${Math.abs(days)} day${Math.abs(days) > 1 ? "s" : ""} early`;
+  if (days > 0) return `${days} day${days > 1 ? "s" : ""} late`;
+  return "On time";
+}
+
+// Reads public_profiles and public_deliveries only. The underlying tables hold
+// client emails and single-use verification tokens, so they are never queried
+// from a public surface. Client names arrive already masked by the database.
+async function getProofData(username: string): Promise<ProofData | null> {
+  if (!isSupabaseConfigured()) return null;
+
+  const supabase = createAdminClient();
+
+  const profileRes = await supabase
+    .from("public_profiles")
+    .select(
+      "id, username, full_name, avatar_url, skill, bio, location, website, linkedin_url, trust_score, badge_tier, total_projects, completed_projects, on_time_rate, ghost_rate, created_at"
+    )
+    .eq("username", username.toLowerCase())
+    .maybeSingle();
+
+  const profile = profileRes.data;
+  if (!profile) return null;
+
+  const deliveriesRes = await supabase
+    .from("public_deliveries")
+    .select(
+      "id, project_id, milestone_id, project_title, milestone_title, delivery_type, was_on_time, days_early_or_late, client_label, client_confirmed_at, created_at"
+    )
+    .eq("freelancer_id", profile.id)
+    .order("client_confirmed_at", { ascending: false });
+
+  const deliveries: ProofDelivery[] = (deliveriesRes.data ?? []).map((row: DeliveryRow) => ({
+    id: row.id,
+    title:
+      row.project_title ||
+      (row.milestone_title ? `Milestone · ${row.milestone_title}` : "Contract deliverable"),
+    clientLabel: row.client_label,
+    timingLabel: timingLabel(row.days_early_or_late),
+    deliveredLabel: dateLabel(row.created_at),
+    confirmedLabel: dateLabel(row.client_confirmed_at),
+    isOnTime: row.was_on_time,
+  }));
+
+  return { profile, deliveries };
+}
+
 export async function generateMetadata({ params }: ProfilePageProps): Promise<Metadata> {
-  const data = await getProfileData(params.username);
-  if (!data || !data.profile) {
-    return {
-      title: "Profile Not Found | Voucht",
-    };
+  const data = await getProofData(params.username);
+
+  if (!data) {
+    return { title: "Profile not found | Voucht" };
   }
 
-  const { profile } = data;
-  const name = profile.full_name || params.username;
-  const score = profile.trust_score ?? 94;
-  const skill = profile.skill || "Verified Freelancer";
-  const completedProjects = profile.completed_projects ?? 23;
-  const onTimeRate = profile.on_time_rate ?? 96;
+  const { profile, deliveries } = data;
+  const name = profile.full_name || profile.username;
+  const scoreText = formatTrustScore(profile.trust_score);
+  const url = proofPageUrl(profile.username);
+  // Social crawlers do not render SVG, so shares use the static brand card while
+  // the description below carries this profile's real, server-computed numbers.
+  const ogImage = "/og-image.png";
 
-  const title = `${name} — Trust Score: ${score}/100 | Voucht`;
-  const description = `${name} is a verified ${skill} with a ${score}/100 Trust Score. ${completedProjects} projects delivered, ${onTimeRate}% on time.`;
-  const ogImageUrl = `https://voucht.tech/api/badge/${params.username}`;
+  const description =
+    profile.trust_score === null
+      ? `${name}'s Voucht proof page. No client-confirmed deliveries recorded yet.`
+      : `${name} — Trust Score ${scoreText}/100 (${badgeFor(profile.badge_tier).label}). ` +
+        `${profile.completed_projects} projects delivered, ${profile.on_time_rate}% on time, ` +
+        `${deliveries.length} client-confirmed deliveries.`;
 
   return {
-    title,
+    title: `${name} — Trust Score ${scoreText}/100 | Voucht`,
     description,
+    alternates: { canonical: url },
     openGraph: {
-      title,
+      title: `${name} on Voucht`,
       description,
       type: "profile",
-      url: `https://voucht.tech/profile/${params.username}`,
-      images: [
-        {
-          url: ogImageUrl,
-          width: 1200,
-          height: 630,
-          alt: `${name} Voucht Trust Score`,
-        },
-      ],
+      url,
+      images: [{ url: ogImage, width: 1792, height: 1024, alt: `${name} on Voucht` }],
     },
     twitter: {
       card: "summary_large_image",
-      title,
+      title: `${name} on Voucht`,
       description,
-      images: [ogImageUrl],
+      images: [ogImage],
     },
   };
 }
 
 export default async function PublicProofPage({ params }: ProfilePageProps) {
-  const data = await getProfileData(params.username);
+  const data = await getProofData(params.username);
 
-  if (!data || !data.profile) {
+  if (!data) {
     notFound();
   }
 
   const { profile, deliveries } = data;
-
-  // Log view asynchronously
-  if (profile.id) {
-    logProfileView(profile.id);
-  }
-
-  const trustScore = profile.trust_score ?? 94;
-  const tier = trustScore >= 80 ? "exceptional" : trustScore >= 60 ? "reliable" : "building";
-  const completedProjects = profile.completed_projects ?? deliveries.length ?? 23;
-  const onTimeRate = profile.on_time_rate ?? 96;
-  const avgResponse = profile.avg_response_hours ?? 1.4;
-  const ghostRate = profile.ghost_rate ?? 0;
+  const badge = badgeFor(profile.badge_tier);
 
   return (
     <div className="min-h-screen bg-[#0a0c16] text-white flex flex-col justify-between selection:bg-electric selection:text-slate-950">
-      {/* Top Brand Header */}
+      <ProfileViewBeacon username={profile.username} />
+
       <header className="border-b border-surfaceLight/60 bg-[#0f111f]/90 backdrop-blur sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Logo size="md" />
             <span className="text-[11px] font-mono text-textSecondary uppercase tracking-wider hidden sm:inline border-l border-surfaceLight pl-3">
-              Public Proof Ledger
+              Public proof page
             </span>
           </div>
 
@@ -314,28 +181,21 @@ export default async function PublicProofPage({ params }: ProfilePageProps) {
               <Link href="/">What is Voucht?</Link>
             </Button>
             <Button asChild variant="electric" size="sm" className="text-xs font-bold h-9">
-              <Link href="/signup">Create Your Proof Page →</Link>
+              <Link href="/signup">Create your proof page →</Link>
             </Button>
           </div>
         </div>
       </header>
 
-      {/* Main Proof Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-10 w-full space-y-10 flex-1">
-        {/* Verification Cryptographic Banner */}
-        <div className="p-3.5 rounded-xl bg-electric/10 border border-electric/25 flex items-center justify-between text-xs text-electric">
-          <div className="flex items-center gap-2.5">
-            <ShieldCheck className="w-4 h-4 shrink-0" />
-            <span>
-              This is a verified <strong>Voucht Proof Page</strong>. All milestone sign-offs are confirmed directly by authorized clients.
-            </span>
-          </div>
-          <span className="font-mono text-[11px] font-bold hidden md:inline px-2 py-0.5 rounded bg-electric/15">
-            VERIFIED LEDGER
+        <div className="p-3.5 rounded-xl bg-electric/10 border border-electric/25 flex items-center gap-2.5 text-xs text-electric">
+          <ShieldCheck className="w-4 h-4 shrink-0" />
+          <span>
+            Every delivery listed here was confirmed by the client who received it, through a
+            single-use link. Client names are masked for their privacy.
           </span>
         </div>
 
-        {/* HEADER SECTION */}
         <section className="p-8 rounded-2xl bg-gradient-to-b from-[#16182e] to-[#101222] border border-surfaceLight shadow-xl flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-left">
           <div className="relative shrink-0">
             <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-[#1b1e36] flex items-center justify-center font-bold text-3xl text-white border-2 border-electric overflow-hidden shadow-[0_0_25px_rgba(0,255,136,0.15)]">
@@ -347,19 +207,14 @@ export default async function PublicProofPage({ params }: ProfilePageProps) {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                profile.full_name?.slice(0, 2).toUpperCase() || "VR"
+                profile.full_name?.slice(0, 2).toUpperCase() || "V"
               )}
-            </div>
-            <div className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-electric border-2 border-[#101222] flex items-center justify-center text-slate-950 shadow-md">
-              <ShieldCheck className="w-4 h-4" />
             </div>
           </div>
 
           <div className="space-y-2 flex-1">
             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <h1 className="text-3xl font-black text-white tracking-tight">
-                {profile.full_name}
-              </h1>
+              <h1 className="text-3xl font-black text-white tracking-tight">{profile.full_name}</h1>
               {profile.skill && (
                 <Badge
                   variant="outline"
@@ -369,6 +224,8 @@ export default async function PublicProofPage({ params }: ProfilePageProps) {
                 </Badge>
               )}
             </div>
+
+            <p className="text-sm text-textSecondary">@{profile.username}</p>
 
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-xs text-textSecondary pt-1">
               {profile.location && (
@@ -382,7 +239,7 @@ export default async function PublicProofPage({ params }: ProfilePageProps) {
                 <a
                   href={profile.website}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noreferrer noopener"
                   className="flex items-center gap-1.5 hover:text-electric transition-colors"
                 >
                   <Globe className="w-3.5 h-3.5 text-slate-400" />
@@ -395,11 +252,11 @@ export default async function PublicProofPage({ params }: ProfilePageProps) {
                 <a
                   href={profile.linkedin_url}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noreferrer noopener"
                   className="flex items-center gap-1.5 hover:text-electric transition-colors"
                 >
                   <Linkedin className="w-3.5 h-3.5 text-[#0077b5]" />
-                  <span>LinkedIn Profile</span>
+                  <span>LinkedIn</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
               )}
@@ -407,24 +264,27 @@ export default async function PublicProofPage({ params }: ProfilePageProps) {
           </div>
         </section>
 
-        {/* TRUST SCORE CARD (centered, prominent) */}
         <section className="p-8 sm:p-10 rounded-2xl border border-surfaceLight bg-[#131528] shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-1/2 translate-x-1/2 w-80 h-80 bg-electric/5 rounded-full blur-3xl pointer-events-none" />
 
-          <div className="flex flex-col items-center justify-center text-center space-y-4">
+          <div className="flex flex-col items-center justify-center text-center space-y-4 relative">
             <span className="text-xs font-mono font-bold uppercase tracking-widest text-textSecondary">
-              Verified Freelancer Reputation
+              Trust Score
             </span>
 
             <ProofCircularScore
-              score={trustScore}
+              score={profile.trust_score}
               totalDeliveries={deliveries.length}
-              tier={tier}
+              tier={profile.badge_tier}
             />
+
+            <p className="text-xs text-textSecondary max-w-md">
+              {badge.requirement} The score is calculated by Voucht from recorded deliveries and
+              cannot be set manually.
+            </p>
           </div>
         </section>
 
-        {/* STATS ROW (4 stat cards, glass morphism style) */}
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="p-5 rounded-xl border border-surfaceLight/80 bg-[#121426]/80 backdrop-blur shadow-lg flex flex-col justify-between">
             <div className="p-2 w-fit rounded-lg bg-navyMid border border-surfaceLight text-electric mb-3">
@@ -432,11 +292,9 @@ export default async function PublicProofPage({ params }: ProfilePageProps) {
             </div>
             <div>
               <div className="text-2xl sm:text-3xl font-black font-mono text-white">
-                {completedProjects}
+                {profile.completed_projects}
               </div>
-              <span className="text-xs font-medium text-textSecondary">
-                Projects Delivered
-              </span>
+              <span className="text-xs font-medium text-textSecondary">Projects delivered</span>
             </div>
           </div>
 
@@ -446,25 +304,21 @@ export default async function PublicProofPage({ params }: ProfilePageProps) {
             </div>
             <div>
               <div className="text-2xl sm:text-3xl font-black font-mono text-white">
-                {onTimeRate}%
+                {profile.on_time_rate}%
               </div>
-              <span className="text-xs font-medium text-textSecondary">
-                On-Time Rate
-              </span>
+              <span className="text-xs font-medium text-textSecondary">On-time deliveries</span>
             </div>
           </div>
 
           <div className="p-5 rounded-xl border border-surfaceLight/80 bg-[#121426]/80 backdrop-blur shadow-lg flex flex-col justify-between">
             <div className="p-2 w-fit rounded-lg bg-navyMid border border-surfaceLight text-sky-400 mb-3">
-              <MessageSquare className="w-4 h-4" />
+              <CheckCircle2 className="w-4 h-4" />
             </div>
             <div>
               <div className="text-2xl sm:text-3xl font-black font-mono text-white">
-                {avgResponse}h
+                {deliveries.length}
               </div>
-              <span className="text-xs font-medium text-textSecondary">
-                Avg Response Speed
-              </span>
+              <span className="text-xs font-medium text-textSecondary">Client confirmations</span>
             </div>
           </div>
 
@@ -474,48 +328,43 @@ export default async function PublicProofPage({ params }: ProfilePageProps) {
             </div>
             <div>
               <div className="text-2xl sm:text-3xl font-black font-mono text-white">
-                {ghostRate}%
+                {profile.ghost_rate}%
               </div>
-              <span className="text-xs font-medium text-textSecondary">
-                Ghost / Abandon Rate
-              </span>
+              <span className="text-xs font-medium text-textSecondary">Abandoned projects</span>
             </div>
           </div>
         </section>
 
-        {/* BIO SECTION (if bio exists) */}
         {profile.bio && (
           <section className="p-6 rounded-xl border border-surfaceLight bg-[#121426] shadow-md space-y-2">
             <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-textSecondary">
-              About & Work Philosophy
+              About
             </h3>
-            <p className="text-sm text-slate-300 leading-relaxed">
-              {profile.bio}
-            </p>
+            <p className="text-sm text-slate-300 leading-relaxed">{profile.bio}</p>
           </section>
         )}
 
-        {/* VERIFIED DELIVERY HISTORY (list) */}
         <section className="space-y-4">
           <div>
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-electric" />
-              <span>Verified Delivery History</span>
+              <span>Verified delivery history</span>
             </h2>
             <p className="text-xs text-textSecondary mt-0.5">
-              Each delivery was confirmed by the actual client
+              Shown only when the client confirmed the delivery themselves.
             </p>
           </div>
 
           {deliveries.length === 0 ? (
             <div className="p-8 rounded-xl border border-dashed border-surfaceLight text-center text-xs text-textSecondary bg-[#121426]">
-              No verified deliveries yet. Check back soon!
+              No verified work history yet. This freelancer has no client-confirmed deliveries
+              recorded.
             </div>
           ) : (
             <div className="space-y-3">
-              {deliveries.map((d: any) => (
+              {deliveries.map((delivery) => (
                 <div
-                  key={d.id}
+                  key={delivery.id}
                   className="p-4 sm:p-5 rounded-xl border border-surfaceLight bg-[#131528] flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-surfaceLight/80"
                 >
                   <div className="flex items-start gap-3.5">
@@ -525,31 +374,31 @@ export default async function PublicProofPage({ params }: ProfilePageProps) {
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h4 className="text-sm sm:text-base font-bold text-white">
-                          {d.project_title}
+                          {delivery.title}
                         </h4>
                         <span
                           className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            d.is_on_time
+                            delivery.isOnTime
                               ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                               : "bg-red-500/10 text-red-400 border-red-500/20"
                           }`}
                         >
-                          {d.is_on_time ? "On Time" : "Late"}
+                          {delivery.timingLabel}
                         </span>
                       </div>
                       <div className="text-xs text-textSecondary flex flex-wrap items-center gap-2">
-                        <span>Client: <strong className="text-slate-300">{maskClientName(d.client_name)}</strong></span>
-                        <span>&bull;</span>
-                        <span className={d.is_on_time ? "text-slate-300" : "text-red-400"}>
-                          Delivered: {d.delivery_status_label}
+                        <span>
+                          Client: <strong className="text-slate-300">{delivery.clientLabel}</strong>
                         </span>
+                        <span>&bull;</span>
+                        <span>Submitted {delivery.deliveredLabel}</span>
                       </div>
                     </div>
                   </div>
 
                   <div className="shrink-0 text-xs sm:text-right font-mono text-electric sm:pl-4 sm:border-l border-surfaceLight">
                     <div className="text-[11px] text-textSecondary font-sans">Client confirmed</div>
-                    <div className="font-bold">{d.confirmation_date}</div>
+                    <div className="font-bold">{delivery.confirmedLabel}</div>
                   </div>
                 </div>
               ))}
@@ -557,62 +406,76 @@ export default async function PublicProofPage({ params }: ProfilePageProps) {
           )}
         </section>
 
-        {/* TRUST BADGE SECTION (bottom) */}
+        <section className="p-6 rounded-xl border border-surfaceLight bg-[#121426] space-y-4">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-electric" />
+            <span>How this score is calculated</span>
+          </h3>
+          <ul className="grid sm:grid-cols-2 gap-3">
+            {TRUST_SCORE_WEIGHTS.map((weight) => (
+              <li key={weight.key} className="text-xs text-textSecondary space-y-0.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-slate-300 font-medium">{weight.label}</span>
+                  <span className="font-mono text-electric">{weight.weight}%</span>
+                </div>
+                <p className="leading-relaxed">{weight.detail}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
         <section className="p-6 rounded-xl border border-surfaceLight bg-[#121426] space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-electric" />
-                <span>Live Embeddable Trust Badge</span>
-              </h3>
+              <h3 className="text-sm font-bold text-white">Embed this badge</h3>
               <p className="text-xs text-textSecondary">
-                This freelancer uses Voucht to verify their reliability
+                Shows {profile.full_name}&rsquo;s live Trust Score and updates automatically.
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <a
-                href={`https://voucht.tech/profile/${profile.username}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-block hover:scale-105 transition-transform"
-              >
-                {/* Live SVG Badge preview */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/badge/${profile.username}`}
-                  alt="Voucht Trust Score"
-                  className="h-10 w-auto rounded-lg shadow-md"
-                />
-              </a>
-            </div>
+            <a
+              href={proofPageUrl(profile.username)}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-block hover:scale-105 transition-transform shrink-0"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={badgeImageUrl(profile.username)}
+                alt={`Voucht Trust Score for ${profile.full_name}`}
+                className="h-10 w-auto rounded-lg shadow-md"
+              />
+            </a>
           </div>
 
-          <div className="pt-3 border-t border-surfaceLight flex items-center justify-between text-xs text-textSecondary">
+          <div className="pt-3 border-t border-surfaceLight flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-textSecondary">
             <div className="flex items-center gap-2">
               <Logo size="sm" />
-              <span>&bull; Powered by <a href="https://voucht.tech" className="text-electric hover:underline">voucht.tech</a></span>
+              <span>
+                &bull; Hosted on{" "}
+                <a href="https://voucht.tech" className="text-electric hover:underline">
+                  Voucht
+                </a>
+              </span>
             </div>
-            <span className="font-mono text-[11px]">Dynamic SVG API</span>
+            <code className="font-mono text-[11px] break-all">{badgeImageUrl(profile.username)}</code>
           </div>
         </section>
       </main>
 
-      {/* FOOTER */}
       <footer className="border-t border-surfaceLight bg-[#0c0d1b] py-8 text-center text-xs text-textSecondary">
         <div className="max-w-4xl mx-auto px-4 space-y-3">
           <p className="text-slate-400 font-medium">
-            Powered by <strong className="text-white">Voucht</strong> — The Trust Layer for Freelancers
+            Powered by <strong className="text-white">Voucht</strong> — verifiable delivery records
+            for freelancers
           </p>
           <div>
             <Button asChild variant="electric" size="sm" className="font-bold text-xs">
-              <Link href="/signup">
-                <span>Create your own Proof Page →</span>
-              </Link>
+              <Link href="/signup">Create your own proof page →</Link>
             </Button>
           </div>
           <p className="text-[11px] text-textSecondary pt-2">
-            Verifiable milestone delivery records backed by client confirmation tokens.
+            Milestone deliveries backed by single-use client confirmation links.
           </p>
         </div>
       </footer>

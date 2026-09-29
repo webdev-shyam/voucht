@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Check, ShieldCheck, Sparkles, ExternalLink } from "lucide-react";
+import { ArrowRight, Check, ShieldCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 
@@ -65,9 +65,9 @@ export function Hero() {
                 variant="outline"
                 className="h-14 px-8 text-base font-medium border-white/10 hover:border-white/20 bg-white/5 backdrop-blur-sm"
               >
-                <Link href="/profile/alexrivera">
-                  <span>See Example Profile</span>
-                  <ExternalLink className="ml-2 w-4 h-4 text-[#00ff88]" />
+                <Link href="#example-proof">
+                  <span>See what your page looks like</span>
+                  <ArrowRight className="ml-2 w-4 h-4 text-[#00ff88]" />
                 </Link>
               </Button>
             </div>
@@ -83,7 +83,7 @@ export function Hero() {
               </span>
               <span className="text-white/20 hidden sm:inline">&bull;</span>
               <span className="flex items-center gap-1.5">
-                <Check className="w-4 h-4 text-[#00ff88]" /> Takes 30 seconds
+                <Check className="w-4 h-4 text-[#00ff88]" /> Sign up in a few minutes
               </span>
             </div>
           </motion.div>
@@ -104,17 +104,16 @@ export function Hero() {
                 {/* Subtle top light highlight */}
                 <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#00ff88]/15 rounded-full blur-2xl pointer-events-none" />
 
-                {/* Card Header & Avatar */}
-                <div className="flex items-start justify-between gap-4 mb-6">
+                <span className="absolute top-0 right-0 px-3 py-1 rounded-bl-xl bg-black/50 border-l border-b border-white/10 text-[10px] uppercase tracking-wider text-[#a0a0b8]">
+                  Illustrative example
+                </span>
+
+                {/* Card Header */}
+                <div className="flex items-start justify-between gap-4 mb-6 mt-4">
                   <div className="flex items-center gap-4">
                     <div className="relative">
-                      <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-[#00ff88]/30 to-[#1e1e3f] p-0.5 border border-[#00ff88]/40">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=160&auto=format&fit=crop&q=80"
-                          alt="Sarah Chen"
-                          className="w-full h-full rounded-full object-cover"
-                        />
+                      <div className="w-16 h-16 rounded-full bg-[#00ff88]/15 border border-[#00ff88]/40 flex items-center justify-center text-xl font-bold text-[#00ff88]">
+                        JD
                       </div>
                       <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#00ff88] flex items-center justify-center text-[#1a1a2e] shadow-md">
                         <ShieldCheck className="w-4 h-4 text-[#1a1a2e]" />
@@ -122,21 +121,14 @@ export function Hero() {
                     </div>
 
                     <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-xl font-bold text-white">Sarah Chen</h3>
-                      </div>
-                      <p className="text-sm font-medium text-[#a0a0b8]">Full-Stack Developer</p>
-                      <p className="text-xs text-[#00ff88] mt-0.5 font-mono">voucht.tech/sarahchen</p>
+                      <h3 className="text-xl font-bold text-white">Your name</h3>
+                      <p className="text-sm font-medium text-[#a0a0b8]">Your headline</p>
+                      <p className="text-xs text-[#00ff88] mt-0.5 font-mono">voucht.tech/your-name</p>
                     </div>
-                  </div>
-
-                  {/* Badge: 🏆 EXCEPTIONAL */}
-                  <div className="px-3 py-1 rounded-full bg-[#00ff88]/10 border border-[#00ff88]/40 text-[#00ff88] text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
-                    🏆 EXCEPTIONAL
                   </div>
                 </div>
 
-                {/* Center: Circular Progress Ring 94/100 */}
+                {/* Center: Circular Progress Ring */}
                 <div className="my-6 py-4 flex flex-col items-center justify-center bg-black/20 rounded-xl border border-white/5">
                   <div className="relative w-32 h-32 flex items-center justify-center">
                     <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 100 100">
@@ -149,7 +141,7 @@ export function Hero() {
                         strokeWidth="8"
                         fill="transparent"
                       />
-                      {/* Animated green score progress */}
+                      {/* Score progress */}
                       <circle
                         cx="50"
                         cy="50"
@@ -166,36 +158,31 @@ export function Hero() {
 
                     <div className="absolute flex flex-col items-center justify-center text-center">
                       <span className="text-3xl font-black font-mono text-white tracking-tight">
-                        94
+                        {score}
                       </span>
                       <span className="text-[11px] font-semibold text-[#a0a0b8] uppercase tracking-wider">
                         / 100 Trust
                       </span>
                     </div>
                   </div>
-                  <span className="mt-2 text-xs text-[#00ff88] font-medium flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> Cryptographically Verified Record
+                  <span className="mt-2 text-xs text-[#a0a0b8] font-medium flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-[#00ff88]" /> Calculated from client-confirmed
+                    deliveries
                   </span>
                 </div>
 
-                {/* Stats Row: 23 Projects | 96% On-Time | 2.1hr Response | 0% Ghost */}
-                <div className="grid grid-cols-4 gap-2 pt-4 border-t border-white/10 text-center">
-                  <div className="p-2 rounded-lg bg-white/5">
-                    <p className="text-xs text-[#a0a0b8] mb-0.5">Projects</p>
-                    <p className="text-sm font-bold text-white font-mono">23</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-white/5">
-                    <p className="text-xs text-[#a0a0b8] mb-0.5">On-Time</p>
-                    <p className="text-sm font-bold text-[#00ff88] font-mono">96%</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-white/5">
-                    <p className="text-xs text-[#a0a0b8] mb-0.5">Response</p>
-                    <p className="text-sm font-bold text-white font-mono">2.1hr</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-white/5">
-                    <p className="text-xs text-[#a0a0b8] mb-0.5">Ghost</p>
-                    <p className="text-sm font-bold text-[#00ff88] font-mono">0%</p>
-                  </div>
+                {/* Stats the product actually records */}
+                <div className="grid grid-cols-3 gap-2 pt-4 border-t border-white/10 text-center">
+                  {[
+                    { label: "Delivered", value: "18" },
+                    { label: "On time", value: "94%" },
+                    { label: "Confirmed", value: "18" },
+                  ].map((stat) => (
+                    <div key={stat.label} className="p-2 rounded-lg bg-white/5">
+                      <p className="text-xs text-[#a0a0b8] mb-0.5">{stat.label}</p>
+                      <p className="text-sm font-bold text-white font-mono">{stat.value}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </motion.div>

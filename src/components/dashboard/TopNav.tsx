@@ -3,15 +3,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
 import {
   Bell,
-  Check,
   CreditCard,
   LogOut,
   Menu,
   Settings,
-  ShieldCheck,
   User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +22,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAppStore } from "@/store/useAppStore";
+import { createClient } from "@/lib/supabase/client";
+import { relativeTime } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
 
 interface TopNavProps {
@@ -36,7 +35,6 @@ export function TopNav({ onOpenMobileSidebar }: TopNavProps) {
   const router = useRouter();
   const user = useAppStore((state) => state.user);
   const activities = useAppStore((state) => state.activities);
-  const [unreadCount, setUnreadCount] = useState(2);
 
   // Compute page title dynamically from route
   const getPageTitle = () => {
@@ -51,13 +49,38 @@ export function TopNav({ onOpenMobileSidebar }: TopNavProps) {
     return "Dashboard";
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Clears the session cookie; without this the middleware signs the visitor
+    // straight back in.
+    await createClient().auth.signOut();
     toast({
       title: "Logged out",
       description: "You have been safely signed out of your session.",
     });
     router.push("/login");
+    router.refresh();
   };
+
+  if (!user) {
+    return (
+      <header className="h-16 border-b border-surfaceLight bg-surface/90 sticky top-0 z-30 px-4 sm:px-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {onOpenMobileSidebar && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden h-11 w-11 text-textSecondary hover:text-white"
+              onClick={onOpenMobileSidebar}
+              aria-label="Open sidebar"
+            >
+              <Menu className="w-5 h-5" />
+            </Button>
+          )}
+          <div className="w-32 h-4 rounded bg-surfaceLight animate-pulse" />
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="h-16 border-b border-surfaceLight bg-surface/90 backdrop-blur sticky top-0 z-30 px-4 sm:px-6 flex items-center justify-between">
@@ -93,8 +116,8 @@ export function TopNav({ onOpenMobileSidebar }: TopNavProps) {
               aria-label="Notifications"
             >
               <Bell className="w-4 h-4" />
-              {unreadCount > 0 && (
-                <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-electric ring-2 ring-surface animate-pulse" />
+              {activities.length > 0 && (
+                <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-electric ring-2 ring-surface" />
               )}
             </Button>
           </DropdownMenuTrigger>
@@ -102,44 +125,34 @@ export function TopNav({ onOpenMobileSidebar }: TopNavProps) {
             align="end"
             className="w-80 border-surfaceLight bg-surface text-white p-0 shadow-xl"
           >
-            <div className="p-3 border-b border-surfaceLight flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-textSecondary">
-                  Notifications
-                </span>
-                {unreadCount > 0 && (
-                  <Badge variant="electric" className="text-[10px] py-0 px-1.5 h-4">
-                    {unreadCount} new
-                  </Badge>
-                )}
-              </div>
-              {unreadCount > 0 && (
-                <button
-                  onClick={() => setUnreadCount(0)}
-                  className="text-[11px] text-electric hover:underline flex items-center gap-1"
-                >
-                  <Check className="w-3 h-3" />
-                  <span>Mark read</span>
-                </button>
-              )}
+            <div className="p-3 border-b border-surfaceLight flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-textSecondary">
+                Recent activity
+              </span>
             </div>
 
             <div className="max-h-72 overflow-y-auto divide-y divide-surfaceLight/50">
-              {activities.slice(0, 4).map((act) => (
-                <div key={act.id} className="p-3 hover:bg-surfaceLight/40 transition-colors">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs font-medium text-slate-200 leading-snug">
-                      {act.title}
+              {activities.length === 0 ? (
+                <p className="p-4 text-xs text-textSecondary">
+                  No activity recorded yet.
+                </p>
+              ) : (
+                activities.slice(0, 4).map((act) => (
+                  <div key={act.id} className="p-3 hover:bg-surfaceLight/40 transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs font-medium text-slate-200 leading-snug">
+                        {act.title}
+                      </p>
+                      <span className="text-[10px] text-textSecondary shrink-0">
+                        {relativeTime(act.createdAt)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-textSecondary mt-0.5 line-clamp-1">
+                      {act.description}
                     </p>
-                    <span className="text-[10px] text-textSecondary shrink-0">
-                      {act.timestamp}
-                    </span>
                   </div>
-                  <p className="text-[11px] text-textSecondary mt-0.5 line-clamp-1">
-                    {act.description}
-                  </p>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </DropdownMenuContent>
         </DropdownMenu>

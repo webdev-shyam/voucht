@@ -13,6 +13,13 @@ import { toast } from "@/components/ui/use-toast";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
+// The middleware sends ?next= when it bounces a visitor to /login. Only accept a
+// same-origin path, so the parameter can never redirect to another site.
+function destinationAfterSignIn(): string {
+  const raw = new URLSearchParams(window.location.search).get("next") || "";
+  return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -47,17 +54,17 @@ export default function LoginPage() {
           description: "Signed in successfully to Voucht.",
           variant: "success",
         });
-        router.push("/dashboard");
+        router.push(destinationAfterSignIn());
       } else {
-        // Smooth demo fallback when Supabase is in initial configuration
-        setTimeout(() => {
-          toast({
-            title: "Welcome back!",
-            description: "Signed in successfully to your Voucht workspace.",
-            variant: "success",
-          });
-          router.push("/dashboard");
-        }, 500);
+        // Signing in without credentials is not possible: pretending otherwise
+        // would land the visitor on a dashboard with no data behind it.
+        toast({
+          title: "Sign-in is not available",
+          description:
+            "This deployment has no Supabase project connected yet, so there is no account to sign in to.",
+          variant: "destructive",
+        });
+        setLoading(false);
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "An unexpected error occurred.";
@@ -70,6 +77,50 @@ export default function LoginPage() {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!isSupabaseConfigured()) {
+      toast({
+        title: "Password reset is not available",
+        description:
+          "This deployment has no Supabase project connected yet, so we cannot send a reset link.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!email.trim()) {
+      toast({
+        title: "Enter your email first",
+        description: "Type the address you signed up with, then press reset.",
+      });
+      return;
+    }
+
+    const supabase = createClient();
+    // Same wording whether or not the address exists, so the form cannot be
+    // used to check which emails have accounts.
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      email.trim().toLowerCase(),
+      { redirectTo: `${window.location.origin}/callback?next=/reset-password` }
+    );
+
+    if (error) {
+      toast({
+        title: "Could not send the reset link",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Reset link sent",
+      description:
+        "If that address has a Voucht account, a password reset link is on its way.",
+      variant: "success",
+    });
+  };
+
   const handleGoogleLogin = async () => {
     setOauthLoading(true);
     try {
@@ -78,7 +129,9 @@ export default function LoginPage() {
         const { error } = await supabase.auth.signInWithOAuth({
           provider: "google",
           options: {
-            redirectTo: `${window.location.origin}/callback?next=/dashboard`,
+            redirectTo: `${window.location.origin}/callback?next=${encodeURIComponent(
+              destinationAfterSignIn()
+            )}`,
           },
         });
 
@@ -91,14 +144,13 @@ export default function LoginPage() {
           setOauthLoading(false);
         }
       } else {
-        setTimeout(() => {
-          toast({
-            title: "Signed In with Google",
-            description: "Proceeding to your Voucht dashboard...",
-            variant: "success",
-          });
-          router.push("/dashboard");
-        }, 500);
+        toast({
+          title: "Sign-in is not available",
+          description:
+            "This deployment has no Supabase project connected yet, so Google sign-in cannot start.",
+          variant: "destructive",
+        });
+        setOauthLoading(false);
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "An error occurred with Google Sign In.";
@@ -162,9 +214,13 @@ export default function LoginPage() {
                   <Label htmlFor="password" className="text-white text-xs font-semibold">
                     Password
                   </Label>
-                  <a href="#" className="text-xs text-[#00ff88] hover:underline">
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="text-xs text-[#00ff88] hover:underline"
+                  >
                     Forgot password?
-                  </a>
+                  </button>
                 </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-[#a0a0b8] absolute left-3.5 top-3" />
@@ -240,6 +296,16 @@ export default function LoginPage() {
             </p>
           </CardFooter>
         </Card>
+
+        <p className="text-[11px] text-[#a0a0b8] text-center leading-relaxed max-w-md mx-auto">
+          <Link href="/privacy" className="text-[#00ff88] hover:underline">
+            Privacy Policy
+          </Link>{" "}
+          &middot;{" "}
+          <Link href="/terms" className="text-[#00ff88] hover:underline">
+            Terms
+          </Link>
+        </p>
       </div>
     </div>
   );

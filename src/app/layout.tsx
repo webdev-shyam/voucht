@@ -26,8 +26,8 @@ export const metadata: Metadata = {
     images: [
       {
         url: "/og-image.png",
-        width: 1200,
-        height: 630,
+        width: 1792,
+        height: 1024,
         alt: "Voucht — The Trust Layer for Freelancers",
       },
     ],
@@ -38,7 +38,6 @@ export const metadata: Metadata = {
     description:
       "Build a verified Trust Score that proves your reliability. Get vouched. Get hired.",
     images: ["/og-image.png"],
-    creator: "@voucht_tech",
   },
 };
 
@@ -49,64 +48,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                try {
-                  // Suppress unhandled TypeError when extensions or wrappers attempt to reassign getter-only fetch
-                  window.addEventListener('error', function(e) {
-                    if (e && e.message && e.message.indexOf('Cannot set property fetch') !== -1) {
-                      if (typeof e.preventDefault === 'function') e.preventDefault();
-                      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
-                      return true;
-                    }
-                  }, true);
-
-                  var _prevOnError = window.onerror;
-                  window.onerror = function(msg) {
-                    if (typeof msg === 'string' && msg.indexOf('Cannot set property fetch') !== -1) {
-                      return true;
-                    }
-                    if (_prevOnError) return _prevOnError.apply(this, arguments);
-                  };
-
-                  // Proactively install a setter for fetch on window and prototype chain
-                  var currentFetch = window.fetch;
-                  var def = {
-                    get: function() { return currentFetch; },
-                    set: function(fn) { currentFetch = fn; },
-                    configurable: true,
-                    enumerable: true
-                  };
-
-                  try {
-                    Object.defineProperty(window, 'fetch', def);
-                  } catch(e1) {}
-
-                  var curr = Object.getPrototypeOf ? Object.getPrototypeOf(window) : window.__proto__;
-                  while (curr && curr !== Object.prototype) {
-                    try {
-                      var d = Object.getOwnPropertyDescriptor(curr, 'fetch');
-                      if (d) {
-                        Object.defineProperty(curr, 'fetch', def);
-                      }
-                    } catch(e2) {}
-                    curr = Object.getPrototypeOf ? Object.getPrototypeOf(curr) : curr.__proto__;
-                  }
-
-                  if (typeof window.Window !== 'undefined' && window.Window.prototype) {
-                    try {
-                      Object.defineProperty(window.Window.prototype, 'fetch', def);
-                    } catch(e3) {}
-                  }
-                } catch(err) {}
-              })();
-            `,
-          }}
-        />
-      </head>
       <body
         className={`${inter.className} bg-navy text-white min-h-screen antialiased selection:bg-electric selection:text-navy`}
         suppressHydrationWarning

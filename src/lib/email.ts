@@ -32,7 +32,7 @@ function getEmailWrapper(content: string) {
       <!-- Footer -->
       <div style="padding: 20px 32px; background-color: #0f101d; border-top: 1px solid #23253e; text-align: center; font-size: 12px; color: #71717a;">
         <p style="margin: 0 0 6px 0;">Sent by <strong style="color: #a1a1aa;">Voucht</strong> · The Verifiable Trust Layer for Freelancers</p>
-        <p style="margin: 0;"><a href="${APP_URL}" style="color: #00ff88; text-decoration: none;">voucht.tech</a> · Cryptographic Delivery Ledger</p>
+        <p style="margin: 0;"><a href="${APP_URL}" style="color: #00ff88; text-decoration: none;">voucht.tech</a> · Verified delivery records</p>
       </div>
     </div>
   </body>
@@ -40,62 +40,8 @@ function getEmailWrapper(content: string) {
   `;
 }
 
-// 1. Welcome Email
-export async function sendWelcomeEmail({
-  to,
-  name,
-  username,
-}: {
-  to: string;
-  name: string;
-  username: string;
-}) {
-  const proofUrl = `${APP_URL}/profile/${username}`;
-  const dashboardUrl = `${APP_URL}/dashboard`;
 
-  const html = getEmailWrapper(`
-    <h1 style="color: #ffffff; font-size: 22px; font-weight: 700; margin-top: 0; margin-bottom: 16px;">
-      Welcome to Voucht! 🎉
-    </h1>
-    <p style="font-size: 15px; line-height: 24px; color: #cbd5e1; margin-bottom: 16px;">
-      Welcome <strong style="color: #ffffff;">${name}</strong>! Your Voucht profile is ready.
-    </p>
-    <div style="background-color: #1a1b32; border: 1px solid #2a2b4d; border-radius: 10px; padding: 16px; margin: 20px 0;">
-      <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: #71717a; margin-bottom: 6px;">Your Public Proof Page</div>
-      <a href="${proofUrl}" style="color: #00ff88; font-size: 14px; font-weight: 600; text-decoration: none; word-break: break-all;">
-        ${proofUrl}
-      </a>
-    </div>
-    <p style="font-size: 14px; line-height: 22px; color: #94a3b8; margin-bottom: 24px;">
-      Next step: Add your first project to start building your verified Trust Score.
-    </p>
-    <div style="text-align: center; margin: 28px 0;">
-      <a href="${dashboardUrl}" style="background-color: #00ff88; color: #0b0c16; font-size: 14px; font-weight: 700; padding: 12px 28px; text-decoration: none; border-radius: 8px; display: inline-block;">
-        Go to Dashboard →
-      </a>
-    </div>
-  `);
-
-  if (!resend) {
-    console.log(`[Voucht Email Stub] Welcome email sent to ${to}. Proof: ${proofUrl}`);
-    return { success: true, mocked: true, proofUrl };
-  }
-
-  try {
-    const data = await resend.emails.send({
-      from: "Voucht <welcome@voucht.tech>",
-      to: [to],
-      subject: "Welcome to Voucht! 🎉",
-      html,
-    });
-    return { success: true, data };
-  } catch (error) {
-    console.error("sendWelcomeEmail error:", error);
-    return { success: false, error };
-  }
-}
-
-// 2. Client Project Confirmation Email
+// 1. Client project confirmation email
 export async function sendClientProjectConfirmationEmail({
   to,
   clientName,
@@ -151,8 +97,8 @@ export async function sendClientProjectConfirmationEmail({
   `);
 
   if (!resend) {
-    console.log(`[Voucht Email Stub] Client Project Confirmation sent to ${to}. Verify URL: ${verifyUrl}`);
-    return { success: true, mocked: true, verifyUrl };
+    // No API key means no email: report that instead of a mocked success.
+    return { sent: false, reason: "email-not-configured" };
   }
 
   try {
@@ -162,14 +108,14 @@ export async function sendClientProjectConfirmationEmail({
       subject: `${freelancerName} added you as a client on Voucht`,
       html,
     });
-    return { success: true, data };
+    return { sent: true };
   } catch (error) {
     console.error("sendClientProjectConfirmationEmail error:", error);
-    return { success: false, error };
+    return { sent: false, reason: "send-failed" };
   }
 }
 
-// 3. Milestone Delivery Confirmation Email
+// 2. Milestone verification request email
 export async function sendMilestoneVerificationEmail({
   to,
   clientName,
@@ -217,13 +163,13 @@ export async function sendMilestoneVerificationEmail({
     </div>
 
     <p style="font-size: 12px; line-height: 18px; color: #71717a; margin-top: 24px;">
-      Voucht seals verified deliveries into verifiable reputation scores.
+      Voucht turns client-confirmed deliveries into a public track record.
     </p>
   `);
 
   if (!resend) {
-    console.log(`[Voucht Email Stub] Milestone delivery confirm sent to ${to}. Verify URL: ${verifyUrl}`);
-    return { success: true, mocked: true, verifyUrl };
+    // No API key means no email: report that instead of a mocked success.
+    return { sent: false, reason: "email-not-configured" };
   }
 
   try {
@@ -233,14 +179,14 @@ export async function sendMilestoneVerificationEmail({
       subject: `Please confirm: ${milestoneTitle} delivered`,
       html,
     });
-    return { success: true, data };
+    return { sent: true };
   } catch (error) {
     console.error("sendMilestoneVerificationEmail error:", error);
-    return { success: false, error };
+    return { sent: false, reason: "send-failed" };
   }
 }
 
-// 4. Milestone Reminder Email
+// 3. Milestone reminder email
 export async function sendMilestoneReminderEmail({
   to,
   name,
@@ -256,7 +202,9 @@ export async function sendMilestoneReminderEmail({
   projectTitle: string;
   dueDate: string;
   projectId?: string;
-  score: number;
+  // The stored score, or null when the freelancer has no evidence yet. There is
+  // no placeholder number: an email must never invent a reputation.
+  score: number | null;
 }) {
   const projectUrl = projectId
     ? `${APP_URL}/dashboard/projects/${projectId}`
@@ -273,12 +221,16 @@ export async function sendMilestoneReminderEmail({
       Your milestone <strong style="color: #00ff88;">'${milestoneTitle}'</strong> for <strong style="color: #ffffff;">'${projectTitle}'</strong> is due on <strong style="color: #ffffff;">${dueDate}</strong>.
     </p>
     <p style="font-size: 14px; line-height: 22px; color: #00ff88; font-weight: 600; margin-bottom: 20px;">
-      Completing on time will boost your Trust Score! 📈
+      Delivering on time is what builds your Trust Score.
     </p>
 
     <div style="background-color: #1a1b32; border: 1px solid #2a2b4d; border-radius: 10px; padding: 14px; margin: 20px 0; text-align: center;">
       <span style="font-size: 12px; color: #71717a; text-transform: uppercase;">Current Trust Score</span>
-      <div style="font-size: 26px; font-weight: 800; color: #00ff88; margin-top: 4px;">${score}<span style="font-size: 14px; color: #71717a;">/100</span></div>
+      <div style="font-size: 26px; font-weight: 800; color: #00ff88; margin-top: 4px;">${
+        score === null
+          ? '<span style="font-size: 15px; color: #cbd5e1;">No verified history yet</span>'
+          : `${score}<span style="font-size: 14px; color: #71717a;">/100</span>`
+      }</div>
     </div>
 
     <div style="text-align: center; margin: 28px 0;">
@@ -289,8 +241,8 @@ export async function sendMilestoneReminderEmail({
   `);
 
   if (!resend) {
-    console.log(`[Voucht Email Stub] Milestone reminder to ${to} for "${milestoneTitle}"`);
-    return { success: true, mocked: true };
+    // No API key means no email: report that instead of a mocked success.
+    return { sent: false, reason: "email-not-configured" };
   }
 
   try {
@@ -300,93 +252,14 @@ export async function sendMilestoneReminderEmail({
       subject: `⏰ Reminder: '${milestoneTitle}' is due in 2 days`,
       html,
     });
-    return { success: true, data };
+    return { sent: true };
   } catch (error) {
     console.error("sendMilestoneReminderEmail error:", error);
-    return { success: false, error };
+    return { sent: false, reason: "send-failed" };
   }
 }
 
-// 5. Score Updated Notification Email
-export async function sendScoreUpdatedEmail({
-  to,
-  name,
-  username,
-  oldScore,
-  newScore,
-  deliveryRate,
-  onTimeRate,
-  ghostRate,
-}: {
-  to: string;
-  name: string;
-  username: string;
-  oldScore: number;
-  newScore: number;
-  deliveryRate: number;
-  onTimeRate: number;
-  ghostRate: number;
-}) {
-  const proofUrl = `${APP_URL}/profile/${username}`;
-
-  const html = getEmailWrapper(`
-    <h2 style="color: #ffffff; font-size: 20px; font-weight: 700; margin-top: 0; margin-bottom: 16px;">
-      Your Trust Score Just Updated! 🏆
-    </h2>
-    <p style="font-size: 15px; line-height: 24px; color: #cbd5e1; margin-bottom: 16px;">
-      Hi <strong style="color: #ffffff;">${name}</strong>,
-    </p>
-    <p style="font-size: 15px; line-height: 24px; color: #cbd5e1; margin-bottom: 20px;">
-      Your Trust Score changed: <span style="color: #71717a; text-decoration: line-through;">${oldScore}</span> → <strong style="color: #00ff88; font-size: 18px;">${newScore}/100</strong>
-    </p>
-
-    <div style="background-color: #1a1b32; border: 1px solid #2a2b4d; border-radius: 10px; padding: 18px; margin: 20px 0;">
-      <div style="font-size: 12px; color: #71717a; text-transform: uppercase; font-weight: 600; margin-bottom: 12px;">Reputation Breakdown</div>
-      <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
-        <span style="color: #94a3b8;">Delivery Completion Rate:</span>
-        <strong style="color: #ffffff;">${deliveryRate}%</strong>
-      </div>
-      <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
-        <span style="color: #94a3b8;">On-Time Delivery Rate:</span>
-        <strong style="color: #ffffff;">${onTimeRate}%</strong>
-      </div>
-      <div style="display: flex; justify-content: space-between; font-size: 13px;">
-        <span style="color: #94a3b8;">Anti-Ghost Rate:</span>
-        <strong style="color: #ffffff;">${ghostRate}%</strong>
-      </div>
-    </div>
-
-    <p style="font-size: 14px; line-height: 22px; color: #cbd5e1; margin-bottom: 20px;">
-      Share your updated Proof Page:
-    </p>
-
-    <div style="text-align: center; margin: 28px 0;">
-      <a href="${proofUrl}" style="background-color: #00ff88; color: #0b0c16; font-size: 14px; font-weight: 700; padding: 12px 28px; text-decoration: none; border-radius: 8px; display: inline-block;">
-        View My Proof Page →
-      </a>
-    </div>
-  `);
-
-  if (!resend) {
-    console.log(`[Voucht Email Stub] Score updated email to ${to}: ${oldScore} -> ${newScore}`);
-    return { success: true, mocked: true, proofUrl };
-  }
-
-  try {
-    const data = await resend.emails.send({
-      from: "Voucht Trust Engine <score@voucht.tech>",
-      to: [to],
-      subject: "Your Trust Score just updated! 🏆",
-      html,
-    });
-    return { success: true, data };
-  } catch (error) {
-    console.error("sendScoreUpdatedEmail error:", error);
-    return { success: false, error };
-  }
-}
-
-// 6. Crypto Subscription Expiring Notice (3 days before expiry)
+// 4. Crypto subscription expiring notice (3 days before expiry)
 export async function sendSubscriptionExpiringEmail({
   to,
   name,
@@ -436,8 +309,8 @@ export async function sendSubscriptionExpiringEmail({
   `);
 
   if (!resend) {
-    console.log(`[Voucht Email Stub] Subscription expiring email to ${to} (${plan}, ${daysLeft} days)`);
-    return { success: true, mocked: true, billingUrl };
+    // No API key means no email: report that instead of a mocked success.
+    return { sent: false, reason: "email-not-configured" };
   }
 
   try {
@@ -447,14 +320,14 @@ export async function sendSubscriptionExpiringEmail({
       subject: `Your Voucht ${planDisplay} plan expires in ${daysLeft} days. Renew to keep your features.`,
       html,
     });
-    return { success: true, data };
+    return { sent: true };
   } catch (error) {
     console.error("sendSubscriptionExpiringEmail error:", error);
-    return { success: false, error };
+    return { sent: false, reason: "send-failed" };
   }
 }
 
-// 7. Payment Failed Notice
+// 5. Payment failed notice
 export async function sendPaymentFailedEmail({
   to,
   name,
@@ -483,8 +356,8 @@ export async function sendPaymentFailedEmail({
   `);
 
   if (!resend) {
-    console.log(`[Voucht Email Stub] Payment failed email to ${to}`);
-    return { success: true, mocked: true, billingUrl };
+    // No API key means no email: report that instead of a mocked success.
+    return { sent: false, reason: "email-not-configured" };
   }
 
   try {
@@ -494,9 +367,9 @@ export async function sendPaymentFailedEmail({
       subject: "Your payment failed. Please update your payment method.",
       html,
     });
-    return { success: true, data };
+    return { sent: true };
   } catch (error) {
     console.error("sendPaymentFailedEmail error:", error);
-    return { success: false, error };
+    return { sent: false, reason: "send-failed" };
   }
 }

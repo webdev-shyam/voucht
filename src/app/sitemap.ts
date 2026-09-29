@@ -4,7 +4,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 interface SitemapProfile {
   username: string;
-  updated_at: string | null;
+  created_at: string | null;
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -31,47 +31,43 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/verify`,
+      url: `${baseUrl}/privacy`,
       lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.6,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
+    {
+      url: `${baseUrl}/terms`,
+      lastModified: new Date(),
+      changeFrequency: "yearly",
+      priority: 0.3,
     },
   ];
 
-  // Dynamic user profiles
+  // Only real accounts: a sitemap may not advertise proof pages that do not
+  // exist, and inventing usernames would also leak which handles we tried.
   let dynamicProfiles: MetadataRoute.Sitemap = [];
   try {
     if (isSupabaseConfigured()) {
       const supabase = createAdminClient();
       const { data } = await supabase
-        .from("profiles")
-        .select("username, updated_at")
-        .limit(100);
+        .from("public_profiles")
+        .select("username, created_at")
+        .limit(5000);
 
       const profiles = data as SitemapProfile[] | null;
 
       if (profiles && profiles.length > 0) {
         dynamicProfiles = profiles.map((p) => ({
           url: `${baseUrl}/profile/${p.username}`,
-          lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
-          changeFrequency: "daily",
+          lastModified: p.created_at ? new Date(p.created_at) : new Date(),
+          changeFrequency: "daily" as const,
           priority: 0.9,
         }));
       }
     }
   } catch {
-    // If Supabase is offline/not configured, provide seed profiles
-  }
-
-  // Fallback seed profiles if none loaded
-  if (dynamicProfiles.length === 0) {
-    const defaultUsernames = ["alexrivera", "sarahtaylor", "devmarcus", "elena_craft"];
-    dynamicProfiles = defaultUsernames.map((username) => ({
-      url: `${baseUrl}/profile/${username}`,
-      lastModified: new Date(),
-      changeFrequency: "daily",
-      priority: 0.9,
-    }));
+    // A database that is unreachable simply yields a sitemap of core pages.
   }
 
   return [...staticRoutes, ...dynamicProfiles];
