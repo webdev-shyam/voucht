@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Lock, Mail } from "lucide-react";
@@ -26,6 +26,27 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
+
+  // /callback redirects here with ?error= when the provider exchange fails. Without
+  // surfacing it a failed sign-in looks like a silent bounce back to the form.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("error");
+    if (!raw) return;
+
+    toast({
+      title: "Sign-in did not complete",
+      description:
+        raw === "missing_oauth_code"
+          ? "The provider returned no authorisation code. Google sign-in is usually not enabled, or this URL is missing from its redirect allow-list."
+          : raw.replace(/_/g, " "),
+      variant: "destructive",
+    });
+
+    // Clear ?error= but keep ?next= so the deep link survives the failed attempt.
+    const next = params.get("next");
+    router.replace(next ? `/login?next=${encodeURIComponent(next)}` : "/login");
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
