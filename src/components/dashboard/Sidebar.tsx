@@ -14,6 +14,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { BADGE_TIERS } from "@/lib/trust-score";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -33,6 +34,10 @@ export function Sidebar({ onClose }: SidebarProps) {
   const pathname = usePathname();
   const user = useAppStore((state) => state.user);
 
+  if (!user) {
+    return <aside className="w-[280px] border-r border-surfaceLight bg-surface" />;
+  }
+
   // Derive plan badge text (FREE / PRO / ELITE)
   const planBadge =
     user.tier === "free"
@@ -41,16 +46,19 @@ export function Sidebar({ onClose }: SidebarProps) {
       ? "ELITE"
       : "PRO";
 
-  // Calculate circular mini score stroke
+  // Calculate circular mini score stroke. A null score draws an empty ring and
+  // a dash: no history is not 0 points and never a guessed number.
   const miniSize = 44;
   const strokeWidth = 4;
   const radius = (miniSize - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const scorePercent = Math.min(100, Math.max(0, user.trustScore || 78));
+  const score = user.trustScore;
+  const hasScore = score !== null;
+  const scorePercent = hasScore ? Math.min(100, Math.max(0, score)) : 0;
   const strokeDashoffset = circumference - (scorePercent / 100) * circumference;
 
-  const ringColor =
-    scorePercent >= 80 ? "#00ff88" : scorePercent >= 60 ? "#fbbf24" : "#f87171";
+  const badge = BADGE_TIERS[user.badgeTier] ?? BADGE_TIERS.none;
+  const ringColor = hasScore ? badge.color : "#a0a0b8";
 
   return (
     <aside className="w-[280px] border-r border-surfaceLight bg-surface flex flex-col justify-between shrink-0 min-h-screen">
@@ -69,9 +77,6 @@ export function Sidebar({ onClose }: SidebarProps) {
               voucht
             </span>
           </Link>
-          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-textSecondary bg-navyLight px-2 py-0.5 rounded border border-surfaceLight">
-            v2.0
-          </span>
         </div>
 
         {/* User Card: Avatar + Name + Plan Badge + Trust Score mini circular display */}
@@ -121,7 +126,7 @@ export function Sidebar({ onClose }: SidebarProps) {
             {/* Trust Score mini circular display */}
             <div
               className="relative flex items-center justify-center shrink-0"
-              title={`Trust Score: ${scorePercent}/100`}
+              title={hasScore ? `Trust Score: ${scorePercent}/100 — ${badge.label}` : BADGE_TIERS.none.label}
             >
               <svg width={miniSize} height={miniSize} className="rotate-[-90deg]">
                 <circle
@@ -146,10 +151,10 @@ export function Sidebar({ onClose }: SidebarProps) {
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                 <span className="text-xs font-bold font-mono text-white leading-none">
-                  {scorePercent}
+                  {hasScore ? scorePercent : "—"}
                 </span>
                 <span className="text-[7px] uppercase font-bold text-textSecondary leading-none scale-90">
-                  pts
+                  {hasScore ? "pts" : "none"}
                 </span>
               </div>
             </div>
@@ -217,7 +222,9 @@ export function Sidebar({ onClose }: SidebarProps) {
           target="_blank"
           className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-electric bg-electric/5 border border-electric/20 hover:bg-electric/15 transition-colors"
         >
-          <span className="truncate">Public Proof: voucht.tech/{user.username}</span>
+          <span className="truncate">
+            Public proof page · @{user.username}
+          </span>
           <ExternalLink className="w-3 h-3 shrink-0 ml-1" />
         </Link>
 

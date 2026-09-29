@@ -10,9 +10,6 @@ import {
   Copy,
   ExternalLink,
   Globe,
-  Mail,
-  Shield,
-  Sparkles,
   User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useAppStore } from "@/store/useAppStore";
 import { toast } from "@/components/ui/use-toast";
+import { proofPageUrl, badgeImageUrl } from "@/lib/utils";
 
 const profileSchema = z.object({
   fullName: z.string().min(2, "Full name is required"),
@@ -29,9 +27,8 @@ const profileSchema = z.object({
     .string()
     .min(3, "Username must be at least 3 characters")
     .regex(/^[a-z0-9_-]+$/, "Username can only contain lowercase letters, numbers, and hyphens"),
-  email: z.string().email("Valid email address required"),
-  headline: z.string().optional(),
-  bio: z.string().optional(),
+  skill: z.string().max(120, "Keep it under 120 characters").optional(),
+  bio: z.string().max(600, "Keep it under 600 characters").optional(),
   avatarUrl: z.string().url("Must be a valid image URL").or(z.literal("")),
 });
 
@@ -39,21 +36,20 @@ type ProfileFormValues = z.infer<typeof profileSchema>;
 
 export function ProfileForm() {
   const user = useAppStore((state) => state.user);
-  const setUser = useAppStore((state) => state.setUser);
-  const logActivity = useAppStore((state) => state.logActivity);
+  const updateProfile = useAppStore((state) => state.updateProfile);
 
   const [copiedBadge, setCopiedBadge] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      fullName: user.fullName || "",
-      username: user.username || "",
-      email: user.email || "",
-      headline: user.headline || "",
-      bio: user.bio || "",
-      avatarUrl: user.avatarUrl || "",
+      fullName: user?.fullName || "",
+      username: user?.username || "",
+      skill: user?.skill || "",
+      bio: user?.bio || "",
+      avatarUrl: user?.avatarUrl || "",
     },
   });
 
@@ -64,30 +60,32 @@ export function ProfileForm() {
     formState: { errors, isSubmitting },
   } = form;
 
+  if (!user) return null;
+
   const currentUsername = watch("username");
-  const proofUrl = `https://voucht.tech/${currentUsername || user.username}`;
-  const badgeMarkdown = `[![Voucht Trust Score](https://voucht.tech/api/badge/${currentUsername || user.username})](https://voucht.tech/${currentUsername || user.username})`;
+  const handle = currentUsername || user.username;
+  const proofUrl = proofPageUrl(handle);
+  const badgeMarkdown = `[![Voucht Trust Score](${badgeImageUrl(handle)})](${proofUrl})`;
 
-  const onSubmit = (data: ProfileFormValues) => {
-    setUser({
-      fullName: data.fullName,
-      username: data.username,
-      email: data.email,
-      headline: data.headline,
-      bio: data.bio,
-      avatarUrl: data.avatarUrl || undefined,
-    });
-
-    logActivity({
-      title: "Updated profile credentials",
-      description: `Saved public proof page settings for ${data.username}.`,
-      type: "milestone_confirmed",
-    });
-
-    toast({
-      title: "Settings Saved! ✅",
-      description: "Your profile information and public proof page are updated.",
-    });
+  const onSubmit = async (data: ProfileFormValues) => {
+    setSaveError(null);
+    try {
+      await updateProfile({
+        full_name: data.fullName,
+        username: data.username,
+        skill: data.skill ?? "",
+        bio: data.bio || null,
+        avatar_url: data.avatarUrl || null,
+      });
+      toast({
+        title: "Profile saved",
+        description: "Your public proof page is updated.",
+      });
+    } catch {
+      setSaveError(
+        "We couldn't save your profile. Check that the handle isn't already taken and try again."
+      );
+    }
   };
 
   const copyBadgeSnippet = () => {
@@ -122,8 +120,8 @@ export function ProfileForm() {
             <span className="text-[11px] font-mono uppercase tracking-wider text-textSecondary">
               Your Public Proof URL
             </span>
-            <p className="text-sm font-mono font-bold text-white">
-              voucht.tech/{currentUsername || user.username}
+            <p className="text-sm font-mono font-bold text-white break-all">
+              {proofUrl}
             </p>
           </div>
         </div>
@@ -145,7 +143,7 @@ export function ProfileForm() {
             size="sm"
             className="text-xs text-electric hover:bg-surfaceLight h-8 gap-1"
           >
-            <a href={`/${currentUsername || user.username}`} target="_blank" rel="noreferrer">
+            <a href={proofUrl} target="_blank" rel="noreferrer">
               <span>Visit Page</span>
               <ExternalLink className="w-3 h-3" />
             </a>
@@ -201,30 +199,33 @@ export function ProfileForm() {
 
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-xs font-semibold text-slate-200">
-                Primary Email *
+                Account email
               </Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="alex@riveradesign.co"
-                className="bg-navyLight border-surfaceLight text-white h-10 text-sm focus:border-electric"
-                {...register("email")}
+                value={user.email}
+                disabled
+                className="bg-navyLight border-surfaceLight text-textSecondary h-10 text-sm"
               />
-              {errors.email && (
-                <p className="text-xs text-red-400">{errors.email.message}</p>
-              )}
+              <p className="text-[11px] text-textSecondary">
+                Sign-in details are managed by your account, not this form.
+              </p>
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="headline" className="text-xs font-semibold text-slate-200">
-                Professional Headline
+              <Label htmlFor="skill" className="text-xs font-semibold text-slate-200">
+                Headline / primary skill
               </Label>
               <Input
-                id="headline"
-                placeholder="Principal Product Designer & Full-Stack Architect"
+                id="skill"
+                placeholder="Principal Product Designer"
                 className="bg-navyLight border-surfaceLight text-white h-10 text-sm focus:border-electric"
-                {...register("headline")}
+                {...register("skill")}
               />
+              {errors.skill && (
+                <p className="text-xs text-red-400">{errors.skill.message}</p>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -244,16 +245,25 @@ export function ProfileForm() {
 
             <div className="space-y-1.5">
               <Label htmlFor="bio" className="text-xs font-semibold text-slate-200">
-                Bio & Delivery Commitment
+                Bio & delivery commitment
               </Label>
               <Textarea
                 id="bio"
                 rows={4}
-                placeholder="Designing high-conversion design systems and fullstack Next.js web applications for funded fintech and AI companies. 100% verified delivery record."
+                placeholder="What you build, who you build it for, and how you work with clients."
                 className="bg-navyLight border-surfaceLight text-white text-sm focus:border-electric"
                 {...register("bio")}
               />
+              {errors.bio && (
+                <p className="text-xs text-red-400">{errors.bio.message}</p>
+              )}
             </div>
+
+            {saveError && (
+              <p className="text-xs text-red-400 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2">
+                {saveError}
+              </p>
+            )}
 
             <div className="pt-3 border-t border-surfaceLight flex justify-end">
               <Button

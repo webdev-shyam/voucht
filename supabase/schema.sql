@@ -1,6 +1,11 @@
 -- =======================================================
 -- VOUCHT - COMPLETE SUPABASE DATABASE SCHEMA
 -- =======================================================
+-- Baseline for a NEW database only. Apply this file, then every file in
+-- supabase/migrations/ in order. An EXISTING database needs only the
+-- migrations. Never edit the policies below to make them more permissive:
+-- the hardened versions live in 0001_harden_rls_and_trust_score.sql.
+-- =======================================================
 
 -- 1. PROFILES TABLE (extends Supabase auth.users)
 CREATE TABLE IF NOT EXISTS public.profiles (
@@ -14,16 +19,15 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   location TEXT,
   website TEXT,
   linkedin_url TEXT,
-  trust_score DECIMAL(5,2) DEFAULT 0,
+  -- No default: a missing score means "no verified work history", not 0 out of 100.
+  trust_score DECIMAL(5,2),
   total_projects INTEGER DEFAULT 0,
   completed_projects INTEGER DEFAULT 0,
   on_time_rate DECIMAL(5,2) DEFAULT 0,
-  avg_response_hours DECIMAL(5,2) DEFAULT 0,
   ghost_rate DECIMAL(5,2) DEFAULT 0,
   badge_tier TEXT DEFAULT 'none' CHECK (badge_tier IN ('none', 'building', 'reliable', 'exceptional')),
   plan TEXT DEFAULT 'free' CHECK (plan IN ('free', 'pro', 'elite')),
   plan_expires_at TIMESTAMPTZ,
-  stripe_customer_id TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -36,7 +40,6 @@ CREATE TABLE IF NOT EXISTS public.projects (
   client_email TEXT NOT NULL,
   client_confirmed BOOLEAN DEFAULT FALSE,
   client_confirmed_at TIMESTAMPTZ,
-  client_token UUID DEFAULT gen_random_uuid(),
   project_title TEXT NOT NULL,
   description TEXT,
   deadline TIMESTAMPTZ NOT NULL,
@@ -59,7 +62,6 @@ CREATE TABLE IF NOT EXISTS public.milestones (
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'submitted', 'confirmed', 'overdue')),
   freelancer_submitted_at TIMESTAMPTZ,
   client_confirmed_at TIMESTAMPTZ,
-  client_confirmation_token UUID DEFAULT gen_random_uuid(),
   is_on_time BOOLEAN,
   notes TEXT,
   sort_order INTEGER DEFAULT 0,
@@ -130,13 +132,15 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 8. PROFILE VIEWS (analytics — who viewed the proof page)
+-- 8. PROFILE VIEWS (analytics — how many visitors, and where they came from)
+-- Viewer identity is a salted daily hash, never an IP address, and no geo or
+-- country data is collected.
 CREATE TABLE IF NOT EXISTS public.profile_views (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
-  viewer_ip TEXT,
-  viewer_country TEXT,
-  referrer TEXT,
+  viewer_hash TEXT,
+  referrer_domain TEXT,
+  source TEXT,
   viewed_at TIMESTAMPTZ DEFAULT NOW()
 );
 

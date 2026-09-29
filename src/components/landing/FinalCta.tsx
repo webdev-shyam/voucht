@@ -21,7 +21,7 @@ export function FinalCta() {
         >
           {/* Decorative badge */}
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00ff88]/10 border border-[#00ff88]/30 text-xs font-bold text-[#00ff88] uppercase tracking-wider mb-6">
-            <ShieldCheck className="w-4 h-4" /> Start In 30 Seconds
+            <ShieldCheck className="w-4 h-4" /> Free to start
           </div>
 
           <h2 className="text-4xl sm:text-6xl font-extrabold text-white tracking-tight mb-6">
@@ -29,7 +29,8 @@ export function FinalCta() {
           </h2>
 
           <p className="text-base sm:text-xl text-[#a0a0b8] max-w-2xl mx-auto leading-relaxed mb-10">
-            Join 500+ freelancers who are winning more clients with verified trust.
+            Create your proof page, send your first client a confirmation link,
+            and let completed work do the talking.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">

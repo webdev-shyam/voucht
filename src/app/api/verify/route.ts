@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
-// In-memory rate limiter: max 5 requests per 60 seconds per IP
+// In-memory rate limiter: max 5 writes per 60 seconds per IP. The window is
+// deliberately small — a confirmation link is a single-use, low-frequency action.
 interface RateLimitRecord {
   count: number;
   resetAt: number;
@@ -20,187 +22,81 @@ function isRateLimited(ip: string): boolean {
     return false;
   }
 
-  if (record.count >= maxRequests) {
-    return true;
-  }
+  if (record.count >= maxRequests) return true;
 
   record.count += 1;
   return false;
 }
 
+const bodySchema = z.object({
+  token: z.string().uuid(),
+  action: z.enum(["confirm", "dispute"]),
+  reason: z.string().trim().max(500).optional(),
+});
+
+// record_verification() is SECURITY DEFINER and owns the whole transaction:
+// it locks the delivery, writes the milestone/project state, recalculates the
+// trust score and appends the activity log. This route must not duplicate any
+// of that, or an unverified client action could reach the database.
 export async function POST(request: Request) {
   try {
-    // 1. Check IP rate limit
     const forwarded = request.headers.get("x-forwarded-for");
-    const ip = forwarded ? forwarded.split(",")[0].trim() : "127.0.0.1";
+    const ip = forwarded ? forwarded.split(",")[0].trim() : "unknown";
 
     if (isRateLimited(ip)) {
       return NextResponse.json(
-        { error: "Too many verification requests. Please wait a minute before retrying." },
-        {
-          status: 429,
-          headers: { "Retry-After": "60" },
-        }
+        { error: "Too many verification attempts. Please wait a minute before retrying." },
+        { status: 429, headers: { "Retry-After": "60" } }
       );
     }
 
-    const { token, action = "confirm", feedback = "", rating = 5 } = await request.json();
-
-    if (!token) {
-      return NextResponse.json({ error: "Missing token" }, { status: 400 });
+    const parsed = bodySchema.safeParse(await request.json());
+    if (!parsed.success) {
+      // An unknown or malformed token is reported as invalid without revealing
+      // whether it exists.
+      return NextResponse.json({ error: "invalid" }, { status: 400 });
     }
 
     if (!isSupabaseConfigured()) {
-      return NextResponse.json({
-        success: true,
-        mocked: true,
-        action,
-        message: action === "confirm" ? "Confirmed successfully (local mode)" : "Reported issue (local mode)",
-      });
+      return NextResponse.json(
+        { error: "The verification service is unavailable right now. Please try again later." },
+        { status: 503 }
+      );
     }
 
-    const supabase: any = createAdminClient();
-    const now = new Date().toISOString();
+    const supabase = createAdminClient();
 
-    // 1. Check if token is for a delivery
-    const { data: delivery } = await supabase
-      .from("deliveries")
-      .select("id, project_id, milestone_id, freelancer_id, client_confirmed")
-      .eq("confirmation_token", token)
-      .maybeSingle();
-
-    if (delivery) {
-      if (delivery.client_confirmed && action === "confirm") {
-        return NextResponse.json({
-          success: true,
-          alreadyConfirmed: true,
-          message: "Delivery already confirmed",
-        });
-      }
-
-      if (action === "confirm") {
-        await supabase
-          .from("deliveries")
-          .update({
-            client_confirmed: true,
-            client_confirmed_at: now,
-          })
-          .eq("id", delivery.id);
-
-        if (delivery.milestone_id) {
-          await supabase
-            .from("milestones")
-            .update({
-              status: "confirmed",
-              client_confirmed_at: now,
-            })
-            .eq("id", delivery.milestone_id);
-        }
-
-        // Trigger trust score recalculation
-        try {
-          await supabase.rpc("recalculate_trust_score", {
-            p_freelancer_id: delivery.freelancer_id,
-          });
-        } catch {
-          // Ignore if RPC not loaded
-        }
-
-        // Log activity
-        await supabase.from("activity_log").insert({
-          user_id: delivery.freelancer_id,
-          event_type: "milestone_confirmed",
-          title: "Milestone Verified by Client",
-          description: `Client approved delivery via secure confirmation link.`,
-          project_id: delivery.project_id,
-        });
-
-        return NextResponse.json({
-          success: true,
-          action: "confirmed",
-        });
-      } else {
-        // Disputed or issue reported
-        if (delivery.milestone_id) {
-          await supabase
-            .from("milestones")
-            .update({
-              status: "disputed",
-              notes: feedback,
-            })
-            .eq("id", delivery.milestone_id);
-        }
-
-        await supabase.from("activity_log").insert({
-          user_id: delivery.freelancer_id,
-          event_type: "delivery_failed",
-          title: "Client Reported Milestone Issue",
-          description: feedback || "Client indicated delivery has not been received.",
-          project_id: delivery.project_id,
-        });
-
-        return NextResponse.json({
-          success: true,
-          action: "disputed",
-        });
-      }
-    }
-
-    // 2. Check if token matches project-level client_token
-    const { data: project } = await supabase
-      .from("projects")
-      .select("id, freelancer_id, client_token, client_confirmed")
-      .eq("client_token", token)
-      .maybeSingle();
-
-    if (project) {
-      if (project.client_confirmed && action === "confirm") {
-        return NextResponse.json({
-          success: true,
-          alreadyConfirmed: true,
-          message: "Project already confirmed",
-        });
-      }
-
-      if (action === "confirm") {
-        await supabase
-          .from("projects")
-          .update({
-            client_confirmed: true,
-            client_confirmed_at: now,
-          })
-          .eq("id", project.id);
-
-        try {
-          await supabase.rpc("recalculate_trust_score", {
-            p_freelancer_id: project.freelancer_id,
-          });
-        } catch {
-          // Ignore
-        }
-
-        await supabase.from("activity_log").insert({
-          user_id: project.freelancer_id,
-          event_type: "project_completed",
-          title: "Client Confirmed Project Scope",
-          description: "Client signed off on project terms.",
-          project_id: project.id,
-        });
-
-        return NextResponse.json({
-          success: true,
-          action: "confirmed",
-          type: "project",
-        });
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: "Processed token with fallback handler",
+    const { data, error } = await supabase.rpc("record_verification", {
+      p_token: parsed.data.token,
+      p_action: parsed.data.action,
+      p_reason: parsed.data.reason ?? null,
     });
+
+    if (error) {
+      console.error("record_verification failed:", error.message);
+      return NextResponse.json(
+        { error: "We could not record your response. Please try again." },
+        { status: 502 }
+      );
+    }
+
+    const result = (data ?? {}) as {
+      success?: boolean;
+      reason?: string;
+      status?: "confirmed" | "disputed";
+    };
+
+    if (!result.success) {
+      // reason is 'invalid' | 'expired' | 'confirmed' | 'disputed' | 'cancelled'
+      return NextResponse.json({ success: false, reason: result.reason ?? "invalid" });
+    }
+
+    return NextResponse.json({ success: true, status: result.status });
   } catch (error) {
     console.error("verify route error:", error);
-    return NextResponse.json({ error: "Failed to verify token" }, { status: 500 });
+    return NextResponse.json(
+      { error: "We could not record your response. Please try again." },
+      { status: 500 }
+    );
   }
 }

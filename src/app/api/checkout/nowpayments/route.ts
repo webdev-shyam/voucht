@@ -1,26 +1,56 @@
 import { NextResponse } from "next/server";
-import { createNowPaymentsInvoice } from "@/lib/payments";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+import { createNowPaymentsInvoice, isNowPaymentsConfigured } from "@/lib/payments";
+
+const bodySchema = z.object({
+  plan: z.enum(["pro", "elite"]),
+});
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { plan, userId, email } = body;
-
-    if (!plan || (plan !== "pro" && plan !== "elite")) {
-      return NextResponse.json({ error: "Invalid plan. Must be 'pro' or 'elite'." }, { status: 400 });
+    if (!isNowPaymentsConfigured()) {
+      return NextResponse.json(
+        { ok: false, reason: "not-configured", error: "Crypto payments are not set up yet." },
+        { status: 503 }
+      );
     }
 
-    const result = await createNowPaymentsInvoice(
-      plan,
-      userId || "usr_anonymous",
-      email || "user@example.com"
-    );
+    const parsed = bodySchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ ok: false, error: "Choose the Pro or Elite plan." }, { status: 400 });
+    }
 
-    return NextResponse.json(result);
-  } catch (error: any) {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user?.email) {
+      return NextResponse.json({ ok: false, error: "Sign in to start a checkout." }, { status: 401 });
+    }
+
+    const result = await createNowPaymentsInvoice(parsed.data.plan, {
+      userId: user.id,
+      email: user.email,
+    });
+
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          reason: result.reason,
+          error: "We could not create the invoice. Please try again.",
+        },
+        { status: result.reason === "not-configured" ? 503 : 502 }
+      );
+    }
+
+    return NextResponse.json({ ok: true, checkoutUrl: result.checkoutUrl });
+  } catch (error) {
     console.error("API /api/checkout/nowpayments error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to create crypto invoice" },
+      { ok: false, error: "We could not create the invoice. Please try again." },
       { status: 500 }
     );
   }

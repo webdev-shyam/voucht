@@ -1,468 +1,485 @@
 import { create } from "zustand";
-import { ActivityItem, Contract, Milestone, Project, SubscriptionTier, TrustScoreFactors, UserProfile } from "@/lib/types";
-import { calculateTrustScore } from "@/lib/trust-score";
+import { createClient } from "@/lib/supabase/client";
+import type {
+  ActivityItem,
+  Contract,
+  Database,
+  Milestone,
+  Project,
+  SubscriptionSummary,
+  UserProfile,
+} from "@/lib/types";
+import {
+  toActivityItem,
+  toContract,
+  toProject,
+  toSubscription,
+  toUserProfile,
+} from "@/lib/mappers";
+import { canAccess } from "@/lib/utils";
+
+// Only the columns a freelancer may edit; the score, badge and plan are derived
+// by the database and the payment webhooks.
+type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
+
+export interface NewMilestone {
+  title: string;
+  description?: string;
+  // The UI does not collect a per-milestone price yet; null renders as "amount
+  // not specified" rather than a fabricated 0.
+  amount?: number;
+  dueDate: string;
+  sortOrder: number;
+}
+
+export interface NewProject {
+  title: string;
+  description?: string;
+  clientName: string;
+  clientEmail: string;
+  totalBudget: number;
+  currency: string;
+  startDate: string;
+  deadline: string;
+  milestones: NewMilestone[];
+}
+
+export interface NewContract {
+  title: string;
+  projectId?: string;
+  clientName: string;
+  clientEmail: string;
+  contractText: string;
+  scopeOfWork: string;
+  totalValue: number;
+  paymentTerms: string;
+  ipClause: string;
+  terminationTerms: string;
+  // Only true when an actual model produced the text; a template fallback must
+  // not be recorded as AI generated.
+  generatedByAi?: boolean;
+}
+
+export type LoadStatus = "idle" | "loading" | "ready" | "signed-out" | "error";
 
 interface AppState {
-  user: UserProfile;
+  status: LoadStatus;
+  error: string | null;
+  user: UserProfile | null;
   projects: Project[];
   contracts: Contract[];
   activities: ActivityItem[];
-  trustFactors: TrustScoreFactors;
-  
-  // Actions
-  setUser: (user: Partial<UserProfile>) => void;
-  setSubscriptionTier: (tier: SubscriptionTier) => void;
-  addProject: (project: Omit<Project, "id" | "createdAt" | "userId">) => Project;
-  updateProject: (id: string, updates: Partial<Project>) => void;
-  addMilestone: (projectId: string, milestone: Omit<Milestone, "id" | "projectId">) => void;
-  deliverMilestone: (projectId: string, milestoneId: string) => void;
-  confirmMilestone: (projectId: string, milestoneId: string, feedback?: string, rating?: number) => void;
-  addContract: (contract: Omit<Contract, "id" | "createdAt" | "userId">) => Contract;
-  recalculateTrustScore: () => void;
-  logActivity: (activity: Omit<ActivityItem, "id" | "timestamp"> & { timestamp?: string }) => void;
-  completeProject: (projectId: string) => void;
-  cancelProject: (projectId: string) => void;
+  // Only counted for plans that include analytics; null means "not collected".
+  profileViews: number | null;
+  // The subscription row written by a payment webhook, or null when the account
+  // has none. Billing reads this instead of trusting a URL query parameter.
+  subscription: SubscriptionSummary | null;
+
+  load: () => Promise<void>;
+  updateProfile: (updates: ProfileUpdate) => Promise<void>;
+  createProject: (input: NewProject) => Promise<Project | null>;
+  // True only when the milestone row is in the database. The UI reports an
+  // added milestone from this result, never from the click itself.
+  addMilestone: (projectId: string, input: NewMilestone) => Promise<boolean>;
+  submitDelivery: (
+    projectId: string,
+    milestoneId: string
+  ) => Promise<{ token: string } | null>;
+  sendVerificationRequest: (
+    projectId: string,
+    milestoneId: string
+  ) => Promise<{ sent: boolean; reason?: string }>;
+  setProjectStatus: (
+    projectId: string,
+    status: "completed" | "cancelled"
+  ) => Promise<void>;
+  addContract: (input: NewContract) => Promise<Contract | null>;
 }
 
-const INITIAL_USER: UserProfile = {
-  id: "usr_alex_voucht",
-  username: "alexrivera",
-  email: "alex@riveradesign.co",
-  fullName: "Alex Rivera",
-  headline: "Principal Product Designer & Full-Stack Architect",
-  bio: "Designing high-conversion design systems and fullstack Next.js web applications for funded fintech and AI companies. 100% verified delivery record.",
-  avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80",
-  role: "freelancer",
-  trustScore: 94,
-  tier: "pro",
-  createdAt: "2024-01-15T00:00:00Z",
-  verifiedDeliveriesCount: 28,
-  onTimeRate: 98,
-  clientSatisfactionScore: 9.8,
-};
+// Every read and write here runs with the user's own session against RLS. There
+// is no service-role key in the browser and no fallback dataset: if a query
+// fails the UI says so instead of showing somebody else's work.
+async function requireUserId(supabase: ReturnType<typeof createClient>) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new SignedOutError();
+  return user.id;
+}
 
-const INITIAL_PROJECTS: Project[] = [
-  {
-    id: "proj_fintech_os",
-    userId: "usr_alex_voucht",
-    title: "Aura Pay - Mobile Banking Redesign & Design System",
-    clientName: "Elena Rostova",
-    clientEmail: "elena@aurapay.io",
-    clientCompany: "Aura Financial Technologies",
-    totalBudget: 14500,
-    currency: "USD",
-    startDate: "2024-07-01",
-    deadline: "2024-09-30",
-    status: "active",
-    createdAt: "2024-07-01T10:00:00Z",
-    milestones: [
-      {
-        id: "ms_1",
-        projectId: "proj_fintech_os",
-        title: "User Journey Maps & Wireframes",
-        description: "Complete IA documentation, wireframes for 32 screens, and design tokens.",
-        amount: 4500,
-        dueDate: "2024-07-20",
-        status: "confirmed",
-        deliveredAt: "2024-07-18T14:00:00Z",
-        confirmedAt: "2024-07-19T09:30:00Z",
-        clientFeedback: "Phenomenal attention to detail. Delivered 2 days early.",
-        rating: 5,
-      },
-      {
-        id: "ms_2",
-        projectId: "proj_fintech_os",
-        title: "High-Fidelity Component Library & Prototype",
-        description: "Interactive Figma prototype and responsive dark/light modes.",
-        amount: 5500,
-        dueDate: "2024-08-25",
-        status: "confirmed",
-        deliveredAt: "2024-08-24T18:00:00Z",
-        confirmedAt: "2024-08-25T11:00:00Z",
-        clientFeedback: "Our engineers loved the token structure. Flawless execution.",
-        rating: 5,
-      },
-      {
-        id: "ms_3",
-        projectId: "proj_fintech_os",
-        title: "Developer Handoff & Motion Specs",
-        description: "Tailwind tokens export, micro-interactions, and code review guidance.",
-        amount: 4500,
-        dueDate: "2024-09-28",
-        status: "delivered",
-        deliveredAt: "2024-09-26T16:00:00Z",
-        verificationToken: "tok_aura_hand_982",
-      },
-    ],
-  },
-  {
-    id: "proj_saas_crm",
-    userId: "usr_alex_voucht",
-    title: "Orbit Analytics - Realtime Event Dashboard",
-    clientName: "Marcus Vance",
-    clientEmail: "marcus@orbitdata.dev",
-    clientCompany: "Orbit Inc.",
-    totalBudget: 9800,
-    currency: "USD",
-    startDate: "2024-05-10",
-    deadline: "2024-06-25",
-    status: "completed",
-    createdAt: "2024-05-10T08:00:00Z",
-    milestones: [
-      {
-        id: "ms_4",
-        projectId: "proj_saas_crm",
-        title: "API Architecture & Realtime Pipeline",
-        description: "Next.js backend proxy with SSE data feeds and caching.",
-        amount: 4800,
-        dueDate: "2024-05-30",
-        status: "confirmed",
-        deliveredAt: "2024-05-28T12:00:00Z",
-        confirmedAt: "2024-05-29T10:00:00Z",
-        clientFeedback: "Top tier engineer. Would hire again in a heartbeat.",
-        rating: 5,
-      },
-      {
-        id: "ms_5",
-        projectId: "proj_saas_crm",
-        title: "Recharts Custom Visualizer & Edge Deployment",
-        description: "Interactive data analytics suite deployed with zero latency.",
-        amount: 5000,
-        dueDate: "2024-06-25",
-        status: "confirmed",
-        deliveredAt: "2024-06-23T11:00:00Z",
-        confirmedAt: "2024-06-24T15:00:00Z",
-        clientFeedback: "Exceeded all performance benchmarks.",
-        rating: 5,
-      },
-    ],
-  },
-];
-
-const INITIAL_CONTRACTS: Contract[] = [
-  {
-    id: "cnt_1",
-    userId: "usr_alex_voucht",
-    title: "Master Services Agreement - Aura Pay",
-    clientName: "Elena Rostova",
-    clientEmail: "elena@aurapay.io",
-    scopeOfWork: "Full product design and design system specifications.",
-    totalValue: 14500,
-    currency: "USD",
-    paymentTerms: "Net 7 from milestone sign-off on Voucht.",
-    ipClause: "100% assignment upon final payment.",
-    terminationTerms: "14 days written notice.",
-    status: "signed",
-    generatedByAi: true,
-    signedAt: "2024-07-02T14:30:00Z",
-    createdAt: "2024-07-01T11:00:00Z",
-  },
-];
-
-const INITIAL_ACTIVITIES: ActivityItem[] = [
-  {
-    id: "act_1",
-    type: "milestone_delivered",
-    title: "Delivered: Developer Handoff & Motion Specs",
-    description: "Milestone sent for Aura Pay verification.",
-    timestamp: "2 hours ago",
-  },
-  {
-    id: "act_2",
-    type: "milestone_confirmed",
-    title: "Sign-off Received: High-Fidelity Prototype",
-    description: "Elena Rostova verified delivery with 5.0 rating.",
-    timestamp: "3 days ago",
-    scoreChange: 2,
-  },
-  {
-    id: "act_3",
-    type: "score_updated",
-    title: "Trust Score increased to 94",
-    description: "Maintained 98% on-time delivery metric across 28 milestones.",
-    timestamp: "1 week ago",
-    scoreChange: 1,
-  },
-];
+class SignedOutError extends Error {
+  constructor() {
+    super("You need to sign in to view this page.");
+    this.name = "SignedOutError";
+  }
+}
 
 export const useAppStore = create<AppState>((set, get) => ({
-  user: INITIAL_USER,
-  projects: INITIAL_PROJECTS,
-  contracts: INITIAL_CONTRACTS,
-  activities: INITIAL_ACTIVITIES,
-  trustFactors: calculateTrustScore(INITIAL_PROJECTS),
+  status: "idle",
+  error: null,
+  user: null,
+  projects: [],
+  contracts: [],
+  activities: [],
+  profileViews: null,
+  subscription: null,
 
-  setUser: (updates) => {
-    set((state) => ({ user: { ...state.user, ...updates } }));
-  },
+  load: async () => {
+    if (get().status === "loading") return;
+    set({ status: "loading", error: null });
 
-  setSubscriptionTier: (tier) => {
-    set((state) => ({ user: { ...state.user, tier } }));
-  },
+    const supabase = createClient();
 
-  addProject: (data) => {
-    const newProject: Project = {
-      ...data,
-      id: `proj_${Date.now()}`,
-      userId: get().user.id,
-      createdAt: new Date().toISOString(),
-    };
-    set((state) => {
-      const updatedProjects = [newProject, ...state.projects];
-      return {
-        projects: updatedProjects,
-        trustFactors: calculateTrustScore(updatedProjects),
-        activities: [
-          {
-            id: `act_${Date.now()}`,
-            type: "project_created",
-            title: `New Project: ${newProject.title}`,
-            description: `Started with ${newProject.clientName} (${newProject.currency} ${newProject.totalBudget})`,
-            timestamp: "Just now",
-          },
-          ...state.activities,
-        ],
-      };
+    let userId: string;
+    try {
+      userId = await requireUserId(supabase);
+    } catch {
+      set({
+        status: "signed-out",
+        user: null,
+        projects: [],
+        contracts: [],
+        activities: [],
+        profileViews: null,
+        subscription: null,
+      });
+      return;
+    }
+
+    const [
+      { data: profile },
+      { data: projectRows, error: projectsError },
+      { data: contractRows },
+      { data: activityRows },
+      { data: subscriptionRow },
+    ] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+      supabase
+        .from("projects")
+        .select("*")
+        .eq("freelancer_id", userId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("contracts")
+        .select("*")
+        .eq("freelancer_id", userId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("activity_log")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      supabase.from("subscriptions").select("*").eq("user_id", userId).maybeSingle(),
+    ]);
+
+    if (projectsError) {
+      set({
+        status: "error",
+        error: "We couldn't load your projects. Check your connection and try again.",
+      });
+      return;
+    }
+
+    const projects = projectRows ?? [];
+    const projectIds = projects.map((p) => p.id);
+
+    const [{ data: milestoneRows }, { data: deliveryRows }] = await Promise.all([
+      supabase.from("milestones").select("*").in("project_id", projectIds),
+      supabase.from("deliveries").select("*").eq("freelancer_id", userId),
+    ]);
+
+    const milestones = milestoneRows ?? [];
+    const deliveries = deliveryRows ?? [];
+
+    // Visitor counts are an Elite feature, so the number is only fetched when
+    // the plan includes it. null means "not collected", never "zero views".
+    let profileViews: number | null = null;
+    if (profile && canAccess(profile.plan, "profile_analytics")) {
+      const { count } = await supabase
+        .from("profile_views")
+        .select("id", { count: "exact", head: true })
+        .eq("profile_id", userId);
+      profileViews = count ?? 0;
+    }
+
+    set({
+      status: profile ? "ready" : "error",
+      error: profile ? null : "Your profile is missing. Please sign out and back in.",
+      user: profile ? toUserProfile(profile) : null,
+      profileViews,
+      subscription: subscriptionRow ? toSubscription(subscriptionRow) : null,
+      projects: projects.map((p) =>
+        toProject(
+          p,
+          milestones.filter((m) => m.project_id === p.id),
+          deliveries.filter((d) => d.project_id === p.id)
+        )
+      ),
+      contracts: (contractRows ?? []).map(toContract),
+      activities: (activityRows ?? []).map(toActivityItem),
     });
-    return newProject;
   },
 
-  updateProject: (id, updates) => {
-    set((state) => {
-      const updatedProjects = state.projects.map((p) =>
-        p.id === id ? { ...p, ...updates } : p
+  updateProfile: async (updates) => {
+    const supabase = createClient();
+    const userId = await requireUserId(supabase);
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .update(updates)
+      .eq("id", userId)
+      .select("*")
+      .single();
+
+    if (error) {
+      set({ error: "We couldn't save those changes. Please try again." });
+      throw new Error("profile_update_failed");
+    }
+
+    set({ user: toUserProfile(data), error: null });
+  },
+
+  createProject: async (input) => {
+    const supabase = createClient();
+    const userId = await requireUserId(supabase);
+
+    const { data: project, error } = await supabase
+      .from("projects")
+      .insert({
+        freelancer_id: userId,
+        project_title: input.title,
+        description: input.description || null,
+        client_name: input.clientName,
+        client_email: input.clientEmail,
+        payment_amount: input.totalBudget,
+        currency: input.currency,
+        started_at: input.startDate,
+        deadline: input.deadline,
+        status: "active",
+      })
+      .select("*")
+      .single();
+
+    if (error || !project) {
+      set({ error: "We couldn't create this project. Check the required fields and try again." });
+      return null;
+    }
+
+    if (input.milestones.length > 0) {
+      const { error: milestonesError } = await supabase.from("milestones").insert(
+        input.milestones.map((m) => ({
+          project_id: project.id,
+          title: m.title,
+          description: m.description || null,
+          amount: m.amount ?? null,
+          due_date: m.dueDate,
+          sort_order: m.sortOrder,
+          status: "pending",
+        }))
       );
-      return {
-        projects: updatedProjects,
-        trustFactors: calculateTrustScore(updatedProjects),
-      };
+
+      if (milestonesError) {
+        await supabase.from("projects").delete().eq("id", project.id);
+        set({ error: "We couldn't add those milestones. The project was not created." });
+        return null;
+      }
+    }
+
+    await supabase.from("activity_log").insert({
+      user_id: userId,
+      project_id: project.id,
+      action: "project_created",
+      description: `Created "${input.title}".`,
     });
+
+    await get().load();
+    return get().projects.find((p) => p.id === project.id) ?? null;
   },
 
-  addMilestone: (projectId, milestoneData) => {
-    const newMilestone: Milestone = {
-      ...milestoneData,
-      id: `ms_${Date.now()}`,
-      projectId,
-      verificationToken: `tok_${Math.random().toString(36).substring(2, 10)}`,
-    };
-    set((state) => {
-      const updatedProjects = state.projects.map((p) => {
-        if (p.id !== projectId) return p;
-        return {
-          ...p,
-          milestones: [...p.milestones, newMilestone],
-        };
+  addMilestone: async (projectId, input) => {
+    const supabase = createClient();
+    const userId = await requireUserId(supabase);
+
+    const { error } = await supabase.from("milestones").insert({
+      project_id: projectId,
+      title: input.title,
+      description: input.description || null,
+      amount: input.amount ?? null,
+      due_date: input.dueDate,
+      sort_order: input.sortOrder,
+      status: "pending",
+    });
+
+    if (error) {
+      set({ error: "We couldn't add that milestone. Please try again." });
+      return false;
+    }
+
+    await supabase.from("activity_log").insert({
+      user_id: userId,
+      project_id: projectId,
+      action: "milestone_created",
+      description: `Added milestone "${input.title}".`,
+    });
+
+    await get().load();
+    return true;
+  },
+
+  // The verification token is generated by the database, never by the browser,
+  // and the freelancer reads it back only because RLS grants them their own row.
+  submitDelivery: async (projectId, milestoneId) => {
+    const supabase = createClient();
+    const userId = await requireUserId(supabase);
+
+    const project = get().projects.find((p) => p.id === projectId);
+    const milestone = project?.milestones.find((m) => m.id === milestoneId);
+    if (!project || !milestone) {
+      set({ error: "That milestone no longer exists." });
+      return null;
+    }
+
+    const { data: delivery, error } = await supabase
+      .from("deliveries")
+      .insert({
+        project_id: projectId,
+        milestone_id: milestoneId,
+        freelancer_id: userId,
+        client_email: project.clientEmail,
+        client_name: project.clientName,
+        delivery_type: "milestone",
+      })
+      .select("*")
+      .single();
+
+    if (error || !delivery) {
+      set({
+        error: "We couldn't record this delivery. Please check your connection and try again.",
       });
-      return {
-        projects: updatedProjects,
-        trustFactors: calculateTrustScore(updatedProjects),
-      };
+      return null;
+    }
+
+    await supabase
+      .from("milestones")
+      .update({ status: "delivered", freelancer_submitted_at: delivery.submitted_at })
+      .eq("id", milestoneId);
+
+    await supabase.from("activity_log").insert({
+      user_id: userId,
+      project_id: projectId,
+      action: "delivery_submitted",
+      description: `Submitted "${milestone.title}" for client verification.`,
     });
+
+    await get().load();
+    return { token: delivery.confirmation_token };
   },
 
-  deliverMilestone: (projectId, milestoneId) => {
-    const now = new Date().toISOString();
-    set((state) => {
-      let milestoneTitle = "Milestone";
-      const updatedProjects = state.projects.map((p) => {
-        if (p.id !== projectId) return p;
-        return {
-          ...p,
-          milestones: p.milestones.map((m) => {
-            if (m.id !== milestoneId) return m;
-            milestoneTitle = m.title;
-            return {
-              ...m,
-              status: "delivered" as const,
-              deliveredAt: now,
-              verificationToken: m.verificationToken || `tok_${Math.random().toString(36).substring(2, 10)}`,
-            };
-          }),
-        };
+  // The email route re-checks ownership with the caller's session, so this is a
+  // request to send, not a instruction about what to send.
+  sendVerificationRequest: async (projectId, milestoneId) => {
+    const state = get();
+    const project = state.projects.find((p) => p.id === projectId);
+    const milestone = project?.milestones.find((m) => m.id === milestoneId);
+
+    if (!milestone?.deliveryId || !milestone.verificationToken) {
+      return { sent: false, reason: "no-delivery" };
+    }
+
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { sent: false, reason: "signed-out" };
+
+    const response = await fetch("/api/email/send-client-confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deliveryId: milestone.deliveryId,
+      }),
+    });
+
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result?.sent) {
+      return { sent: false, reason: result?.reason ?? "send-failed" };
+    }
+
+    return { sent: true };
+  },
+
+  setProjectStatus: async (projectId, status) => {
+    const supabase = createClient();
+    const userId = await requireUserId(supabase);
+
+    const { error } = await supabase
+      .from("projects")
+      .update(
+        status === "completed"
+          ? { status: "completed", completed_at: new Date().toISOString() }
+          : { status: "cancelled" }
+      )
+      .eq("id", projectId)
+      .eq("freelancer_id", userId);
+
+    if (error) {
+      set({ error: "We couldn't update that project. Please try again." });
+      return;
+    }
+
+    if (status === "cancelled") {
+      const project = get().projects.find((p) => p.id === projectId);
+      await supabase.from("activity_log").insert({
+        user_id: userId,
+        project_id: projectId,
+        action: "project_cancelled",
+        description: `Cancelled "${project?.title ?? "project"}".`,
       });
+    }
 
-      return {
-        projects: updatedProjects,
-        trustFactors: calculateTrustScore(updatedProjects),
-        activities: [
-          {
-            id: `act_${Date.now()}`,
-            type: "milestone_delivered",
-            title: `Delivered: ${milestoneTitle}`,
-            description: "Verification link dispatched to client.",
-            timestamp: "Just now",
-          },
-          ...state.activities,
-        ],
-      };
+    await get().load();
+  },
+
+  addContract: async (input) => {
+    const supabase = createClient();
+    const userId = await requireUserId(supabase);
+
+    const { data, error } = await supabase
+      .from("contracts")
+      .insert({
+        freelancer_id: userId,
+        project_id: input.projectId || null,
+        title: input.title,
+        client_name: input.clientName,
+        client_email: input.clientEmail,
+        contract_text: input.contractText,
+        scope: input.scopeOfWork,
+        total_value: input.totalValue,
+        payment_terms: input.paymentTerms,
+        ip_clause: input.ipClause,
+        termination_terms: input.terminationTerms,
+        generated_by_ai: input.generatedByAi ?? false,
+        status: "draft",
+      })
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      set({ error: "We couldn't save this contract draft. Please try again." });
+      return null;
+    }
+
+    await supabase.from("activity_log").insert({
+      user_id: userId,
+      project_id: input.projectId || null,
+      action: "contract_created",
+      description: `Created a contract draft for "${input.clientName}".`,
     });
-  },
 
-  confirmMilestone: (projectId, milestoneId, feedback, rating = 5) => {
-    const now = new Date().toISOString();
-    set((state) => {
-      let milestoneTitle = "Milestone";
-      const updatedProjects = state.projects.map((p) => {
-        if (p.id !== projectId) return p;
-        return {
-          ...p,
-          milestones: p.milestones.map((m) => {
-            if (m.id !== milestoneId) return m;
-            milestoneTitle = m.title;
-            return {
-              ...m,
-              status: "confirmed" as const,
-              confirmedAt: now,
-              clientFeedback: feedback || "Delivery confirmed.",
-              rating,
-            };
-          }),
-        };
-      });
-
-      const newFactors = calculateTrustScore(updatedProjects);
-      return {
-        projects: updatedProjects,
-        trustFactors: newFactors,
-        user: {
-          ...state.user,
-          trustScore: newFactors.overallScore,
-          verifiedDeliveriesCount: state.user.verifiedDeliveriesCount + 1,
-        },
-        activities: [
-          {
-            id: `act_${Date.now()}`,
-            type: "milestone_confirmed",
-            title: `Verified Sign-off: ${milestoneTitle}`,
-            description: `Client verified work. Trust score updated!`,
-            timestamp: "Just now",
-            scoreChange: 1,
-          },
-          ...state.activities,
-        ],
-      };
-    });
-  },
-
-  addContract: (data) => {
-    const newContract: Contract = {
-      ...data,
-      id: `cnt_${Date.now()}`,
-      userId: get().user.id,
-      createdAt: new Date().toISOString(),
-    };
-    set((state) => ({
-      contracts: [newContract, ...state.contracts],
-      activities: [
-        {
-          id: `act_${Date.now()}`,
-          type: "contract_signed",
-          title: `Contract Created: ${newContract.title}`,
-          description: `Ready for client signature (${newContract.currency} ${newContract.totalValue})`,
-          timestamp: "Just now",
-        },
-        ...state.activities,
-      ],
-    }));
-    return newContract;
-  },
-
-  recalculateTrustScore: () => {
-    const updatedProjects = get().projects;
-    const newFactors = calculateTrustScore(updatedProjects);
-    set((state) => ({
-      trustFactors: newFactors,
-      user: {
-        ...state.user,
-        trustScore: newFactors.overallScore,
-      },
-    }));
-  },
-
-  logActivity: (activity) => {
-    set((state) => ({
-      activities: [
-        {
-          ...activity,
-          id: `act_${Date.now()}`,
-          timestamp: activity.timestamp || "Just now",
-        },
-        ...state.activities,
-      ],
-    }));
-  },
-
-  completeProject: (projectId) => {
-    const now = new Date().toISOString();
-    set((state) => {
-      let completedTitle = "Project";
-      const updatedProjects = state.projects.map((p) => {
-        if (p.id !== projectId) return p;
-        completedTitle = p.title;
-        return {
-          ...p,
-          status: "completed" as const,
-          completedAt: now,
-        };
-      });
-
-      const newFactors = calculateTrustScore(updatedProjects);
-      return {
-        projects: updatedProjects,
-        trustFactors: newFactors,
-        user: {
-          ...state.user,
-          trustScore: Math.min(100, newFactors.overallScore + 3),
-          verifiedDeliveriesCount: state.user.verifiedDeliveriesCount + 1,
-        },
-        activities: [
-          {
-            id: `act_${Date.now()}`,
-            type: "milestone_confirmed",
-            title: `Completed Project '${completedTitle}'`,
-            description: "All contractual milestones fully verified & archived in the trust ledger.",
-            timestamp: "Just now",
-            scoreChange: 3,
-          },
-          ...state.activities,
-        ],
-      };
-    });
-  },
-
-  cancelProject: (projectId) => {
-    set((state) => {
-      let cancelledTitle = "Project";
-      const updatedProjects = state.projects.map((p) => {
-        if (p.id !== projectId) return p;
-        cancelledTitle = p.title;
-        return {
-          ...p,
-          status: "disputed" as const,
-        };
-      });
-
-      const newFactors = calculateTrustScore(updatedProjects);
-      return {
-        projects: updatedProjects,
-        trustFactors: newFactors,
-        user: {
-          ...state.user,
-          trustScore: Math.max(10, newFactors.overallScore - 5),
-        },
-        activities: [
-          {
-            id: `act_${Date.now()}`,
-            type: "milestone_delivered",
-            title: `Cancelled project '${cancelledTitle}'`,
-            description: "Engagement terminated. Trust score recalibrated.",
-            timestamp: "Just now",
-            scoreChange: -5,
-          },
-          ...state.activities,
-        ],
-      };
-    });
+    await get().load();
+    return toContract(data);
   },
 }));
+
+export type { Milestone, UserProfile };

@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { APP_URL } from "./constants";
 import { Plan } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
@@ -18,49 +19,68 @@ export function truncateString(str: string, length: number = 20): string {
   return `${str.slice(0, length)}...`;
 }
 
+// Mirrors public.mask_client_name() in supabase/migrations, which is what the
+// public proof views return. Keep the two in step: the database is authoritative
+// for anything a visitor sees.
 export function maskClientName(name?: string): string {
-  if (!name) return "S***a J.";
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) {
-    const w = parts[0];
-    if (w.length <= 2) return `${w[0]}*`;
-    return `${w[0]}***${w[w.length - 1]}`;
-  }
+  const trimmed = (name ?? "").trim();
+  if (!trimmed) return "Client";
+
+  const parts = trimmed.split(/\s+/);
   const first = parts[0];
-  const last = parts[parts.length - 1];
-  const firstMasked =
-    first.length > 2
-      ? `${first[0]}***${first[first.length - 1]}`
-      : `${first[0]}*`;
-  return `${firstMasked} ${last[0].toUpperCase()}.`;
+  let masked = first.slice(0, 1) + "***";
+  if (first.length > 2) masked += first.slice(-1).toLowerCase();
+
+  const last = parts[1];
+  if (last) masked += ` ${last.slice(0, 1).toUpperCase()}.`;
+
+  return masked;
 }
 
+// Canonical share targets for a public proof page and its embeddable badge.
+export function proofPageUrl(username: string): string {
+  return `${APP_URL}/profile/${username}`;
+}
+
+export function badgeImageUrl(username: string): string {
+  return `${APP_URL}/api/badge/${username}`;
+}
+
+// Formats a stored timestamp; it does not invent one.
+export function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const seconds = Math.round((Date.now() - then) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+// Only features the product actually gates are listed. The proof page and the
+// badge are free on every plan; /api/badge has no plan check to gate them with.
 export type FeatureKey =
   | "unlimited_projects"
-  | "trust_badge"
   | "smart_contracts"
   | "milestone_reminders"
-  | "profile_analytics"
-  | "directory_listing"
-  | "custom_url";
+  | "profile_analytics";
 
 export function canAccess(userPlan: Plan | string | undefined, feature: FeatureKey | string): boolean {
   const plan = (userPlan || "free").toLowerCase();
+  const paid = plan === "pro" || plan === "elite";
 
   switch (feature) {
     case "unlimited_projects":
-    case "trust_badge":
-    case "milestone_reminders":
-      return plan === "pro" || plan === "elite" || plan === "agency";
-
     case "smart_contracts":
-      // Pro gets 5/mo, Elite gets unlimited. Free cannot access.
-      return plan === "pro" || plan === "elite" || plan === "agency";
+    case "milestone_reminders":
+      return paid;
 
     case "profile_analytics":
-    case "directory_listing":
-    case "custom_url":
-      return plan === "elite" || plan === "agency";
+      return plan === "elite";
 
     default:
       return true;

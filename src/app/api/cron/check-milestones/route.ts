@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { canAccess } from "@/lib/utils";
 import { sendMilestoneReminderEmail, sendSubscriptionExpiringEmail } from "@/lib/email";
 
 export async function GET(request: Request) {
@@ -10,12 +11,19 @@ export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret) {
-    const isHeaderValid = authHeader === `Bearer ${cronSecret}`;
-    const isQueryValid = querySecret === cronSecret;
-    if (!isHeaderValid && !isQueryValid) {
-      return NextResponse.json({ error: "Unauthorized cron execution" }, { status: 401 });
-    }
+  // Fail closed: without a configured secret anyone could trigger bulk email
+  // sends, so the scheduled job is unavailable rather than unprotected.
+  if (!cronSecret) {
+    return NextResponse.json(
+      { error: "CRON_SECRET is not configured; scheduled jobs are disabled." },
+      { status: 503 }
+    );
+  }
+
+  const isHeaderValid = authHeader === `Bearer ${cronSecret}`;
+  const isQueryValid = querySecret === cronSecret;
+  if (!isHeaderValid && !isQueryValid) {
+    return NextResponse.json({ error: "Unauthorized cron execution" }, { status: 401 });
   }
 
   const now = new Date();
@@ -52,7 +60,8 @@ export async function GET(request: Request) {
             profiles (
               email,
               full_name,
-              trust_score
+              trust_score,
+              plan
             )
           )
         `)
@@ -65,6 +74,10 @@ export async function GET(request: Request) {
           const project = item.projects;
           const profile = project?.profiles;
 
+          // Automated reminders are a paid feature, so the job skips free
+          // accounts instead of mailing the whole user base.
+          if (!canAccess(profile?.plan, "milestone_reminders")) continue;
+
           if (profile?.email) {
             await sendMilestoneReminderEmail({
               to: profile.email,
@@ -73,7 +86,7 @@ export async function GET(request: Request) {
               projectTitle: project.title,
               dueDate: item.due_date,
               projectId: project.id,
-              score: profile.trust_score || 94,
+              score: profile.trust_score ?? null,
             });
 
             remindersSent++;
@@ -191,21 +204,17 @@ export async function GET(request: Request) {
       console.error("[Cron Execution Error]:", err);
     }
   } else {
-    // Graceful fallback simulation when Supabase credentials are not connected in preview
-    remindersSent = 1;
-    overdueUpdated = 0;
-    expiringCryptoNotified = 1;
-    cryptoDowngraded = 0;
-    processedMilestones.push({
-      id: "ms_demo_cron_check",
-      title: "Mobile App Wireframe",
-      action: "simulated_check_success",
-    });
-    processedSubscriptions.push({
-      id: "sub_demo_check",
-      user_id: "usr_alex_voucht",
-      action: "simulated_expiring_check",
-    });
+    // No database, nothing to check. Reporting invented counts here would make
+    // a broken scheduled job look healthy in the logs.
+    return NextResponse.json(
+      {
+        success: false,
+        reason: "not-configured",
+        timestamp: nowIso,
+        error: "Supabase is not configured, so the milestone job did nothing.",
+      },
+      { status: 503 }
+    );
   }
 
   return NextResponse.json({

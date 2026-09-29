@@ -5,17 +5,17 @@ import { AlertCircle, CheckCircle2, ShieldAlert, ShieldCheck, XCircle } from "lu
 
 export function ProblemSolution() {
   const problems = [
-    "62% of freelancers struggle to find clients",
-    "Clients have no way to verify reliability before hiring",
-    "Portfolios show skill, but not trustworthiness",
-    "Fake reviews and cloned case studies have eroded client confidence",
+    "Reliability claims are self-reported, so nobody has to check them",
+    "Clients have no way to verify your delivery history before hiring",
+    "A portfolio shows skill, not whether deadlines were actually met",
+    "Reviews can be written by anyone, including friends",
   ];
 
   const solutions = [
-    "Voucht creates a verified Trust Score from real delivery data",
-    "Clients see your track record before they hire you",
-    "Every delivery receipt is permanent and unfakeable",
-    "One-click client sign-offs build cryptographically provable reputation",
+    "The Trust Score is calculated from deliveries your clients confirmed",
+    "Prospects see the record before they sign anything",
+    "A delivery only counts once the client agrees it happened",
+    "Client names are masked, so the proof stays shareable",
   ];
 
   return (
@@ -107,7 +107,7 @@ export function ProblemSolution() {
             </div>
 
             <div className="mt-8 pt-6 border-t border-white/10 text-xs text-[#00ff88] font-semibold flex items-center gap-1.5">
-              <span>Result: Up to 3.4x higher conversion rate on proposals with zero price haggling.</span>
+              <span>Every claim on a proof page traces back to a delivery a client confirmed.</span>
             </div>
           </motion.div>
         </div>

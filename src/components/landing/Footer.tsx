@@ -5,20 +5,22 @@ export function Footer() {
   return (
     <footer className="border-t border-white/10 bg-[#1a1a2e] pt-16 pb-12 text-[#a0a0b8] text-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 lg:gap-12 mb-16">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 lg:gap-12 mb-16">
           {/* Brand Column */}
           <div className="col-span-2 flex flex-col items-start gap-4">
             <Logo size="md" />
             <p className="text-sm text-[#a0a0b8] max-w-sm leading-relaxed">
-              The verifiable trust engine for independent professionals and boutique agencies. Prove reliability from delivered milestones.
+              Publish the work your clients already confirmed. Voucht turns
+              delivered milestones into a proof page and a score that the API
+              cannot write.
             </p>
             <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-[#00ff88]">
               <span className="w-2 h-2 rounded-full bg-[#00ff88] animate-pulse" />
-              <span>Verifiable Trust Protocol Online</span>
+              <span>Score recalculated on every client confirmation</span>
             </div>
           </div>
 
-          {/* Column 1: Product */}
+          {/* Product */}
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-white mb-4">
               Product
@@ -40,27 +42,32 @@ export function Footer() {
                 </a>
               </li>
               <li>
-                <Link href="/profile/alexrivera" className="hover:text-[#00ff88] transition-colors">
-                  Live Proof Sample
+                <a href="#example-proof" className="hover:text-[#00ff88] transition-colors">
+                  Example proof page
+                </a>
+              </li>
+              <li>
+                <Link href="/signup" className="hover:text-white transition-colors">
+                  Create free account
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* Column 2: Company */}
+          {/* Legal */}
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-white mb-4">
-              Company
+              Legal
             </h4>
-            <ul className="space-y-3 text-sm">
+            <ul className="space-y-3 text-sm mb-8">
               <li>
-                <Link href="#features" className="hover:text-white transition-colors">
-                  About
+                <Link href="/privacy" className="hover:text-white transition-colors">
+                  Privacy
                 </Link>
               </li>
               <li>
-                <Link href="#how-it-works" className="hover:text-white transition-colors">
-                  Blog
+                <Link href="/terms" className="hover:text-white transition-colors">
+                  Terms
                 </Link>
               </li>
               <li>
@@ -69,42 +76,14 @@ export function Footer() {
                 </a>
               </li>
             </ul>
-          </div>
-
-          {/* Column 3: Legal & Social */}
-          <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-white mb-4">
-              Legal
-            </h4>
-            <ul className="space-y-3 text-sm mb-6">
-              <li>
-                <Link href="#" className="hover:text-white transition-colors">
-                  Privacy
-                </Link>
-              </li>
-              <li>
-                <Link href="#" className="hover:text-white transition-colors">
-                  Terms
-                </Link>
-              </li>
-            </ul>
 
             <h4 className="text-xs font-bold uppercase tracking-wider text-white mb-3">
-              Social
+              Built with
             </h4>
-            <div className="flex items-center gap-3 text-xs">
-              <a href="https://twitter.com" target="_blank" rel="noreferrer" className="hover:text-[#00ff88] transition-colors">
-                Twitter
-              </a>
-              <span>&bull;</span>
-              <a href="https://linkedin.com" target="_blank" rel="noreferrer" className="hover:text-[#00ff88] transition-colors">
-                LinkedIn
-              </a>
-              <span>&bull;</span>
-              <a href="https://github.com" target="_blank" rel="noreferrer" className="hover:text-[#00ff88] transition-colors">
-                GitHub
-              </a>
-            </div>
+            <p className="text-xs leading-relaxed text-[#a0a0b8]">
+              Next.js on Vercel, Postgres with row-level security on Supabase,
+              Resend for email, CREEM and NOWPayments for billing.
+            </p>
           </div>
         </div>
 
@@ -112,7 +91,7 @@ export function Footer() {
         <div className="pt-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#a0a0b8]">
           <p>&copy; 2026 Voucht. Built for freelancers who deliver.</p>
           <p className="text-[#a0a0b8]/60">
-            Powered by Cryptographic Sign-offs & AI Smart Contracts
+            Client-confirmed deliveries &middot; editable AI contract drafts
           </p>
         </div>
       </div>

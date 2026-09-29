@@ -7,25 +7,25 @@ const STEPS = [
   {
     step: "1",
     title: "Sign up free",
-    desc: "Create your profile in 30 seconds. No credit card required. Choose your specialty and personalize your handle.",
+    desc: "Create your profile with an email or a Google account. Pick your specialty and claim your handle. No credit card required.",
     icon: UserPlus,
   },
   {
     step: "2",
     title: "Add your projects & clients",
-    desc: "Import or enter your deliverables, timeline, and client contacts. Generate instant AI smart contracts if needed.",
+    desc: "Enter each deliverable, its deadline and the client contact. On Pro you can also generate an editable contract draft with AI.",
     icon: FolderPlus,
   },
   {
     step: "3",
     title: "Deliver & get verified",
-    desc: "Mark milestones delivered. Clients confirm with a 1-click tokenized email link without creating an account.",
+    desc: "Mark a milestone as delivered. The client confirms with a one-click link in their email, without creating an account.",
     icon: CheckCircle2,
   },
   {
     step: "4",
     title: "Share your Proof Page",
-    desc: "Embed dynamic live badges into your portfolio, proposals, and email signatures. Watch your closing rate soar.",
+    desc: "Put your Proof Page link and live badge on proposals, your portfolio and your email signature, so the confirmed work travels with you.",
     icon: Share2,
   },
 ];
@@ -42,7 +42,7 @@ export function HowItWorks() {
             How It Works
           </h2>
           <p className="text-base sm:text-lg text-[#a0a0b8]">
-            From zero to an unfakeable, client-verified trust score in minutes.
+            From your first delivered milestone to a client-verified trust score.
           </p>
         </div>
 

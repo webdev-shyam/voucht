@@ -10,25 +10,18 @@ const nextConfig = {
       },
     ],
   },
-  async headers() {
+  async redirects() {
     return [
+      // Badges embedded before the API path existed keep working.
       {
         source: "/badge/:path*",
-        headers: [
-          {
-            key: "Content-Security-Policy",
-            value: "frame-ancestors *",
-          },
-          {
-            key: "X-Content-Type-Options",
-            value: "nosniff",
-          },
-          {
-            key: "Access-Control-Allow-Origin",
-            value: "*",
-          },
-        ],
+        destination: "/api/badge/:path*",
+        permanent: false,
       },
+    ];
+  },
+  async headers() {
+    return [
       {
         source: "/api/badge/:path*",
         headers: [
@@ -47,7 +40,7 @@ const nextConfig = {
         ],
       },
       {
-        source: "/((?!badge|api/badge).*)",
+        source: "/((?!api/badge).*)",
         headers: [
           {
             key: "X-Frame-Options",

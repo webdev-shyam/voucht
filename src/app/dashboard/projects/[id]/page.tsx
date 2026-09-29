@@ -26,6 +26,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -35,7 +37,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAppStore } from "@/store/useAppStore";
-import { formatCurrency, maskClientName } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
 
 export default function ProjectDetailPage() {
@@ -43,27 +45,38 @@ export default function ProjectDetailPage() {
   const router = useRouter();
   const projectId = params.id as string;
 
+  const status = useAppStore((state) => state.status);
   const projects = useAppStore((state) => state.projects);
   const user = useAppStore((state) => state.user);
-  const deliverMilestone = useAppStore((state) => state.deliverMilestone);
-  const confirmMilestone = useAppStore((state) => state.confirmMilestone);
-  const completeProject = useAppStore((state) => state.completeProject);
-  const cancelProject = useAppStore((state) => state.cancelProject);
-  const updateProject = useAppStore((state) => state.updateProject);
-  const logActivity = useAppStore((state) => state.logActivity);
+  const submitDelivery = useAppStore((state) => state.submitDelivery);
+  const sendVerificationRequest = useAppStore((state) => state.sendVerificationRequest);
+  const setProjectStatus = useAppStore((state) => state.setProjectStatus);
+  const addMilestone = useAppStore((state) => state.addMilestone);
 
-  const [resendingEmail, setResendingEmail] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [showAddMilestone, setShowAddMilestone] = useState(false);
+  const [savingMilestone, setSavingMilestone] = useState(false);
+  const [milestoneDraft, setMilestoneDraft] = useState({
+    title: "",
+    description: "",
+    dueDate: "",
+  });
 
   const project = projects.find((p) => p.id === projectId);
 
   if (!project) {
+    if (status === "loading" || status === "idle") {
+      return <div className="h-64 rounded-2xl bg-surface/60 animate-pulse" />;
+    }
     return (
       <div className="text-center py-20">
-        <h2 className="text-xl font-bold text-white mb-2">Project Not Found</h2>
+        <h2 className="text-xl font-bold text-white mb-2">Project not found</h2>
         <p className="text-sm text-textSecondary mb-6">
-          The requested project does not exist or has been removed.
+          This project is not in your account. It may have been removed, or you
+          may be signed in with a different email.
         </p>
         <Button asChild variant="electric" size="sm">
           <Link href="/dashboard/projects">Back to Projects</Link>
@@ -72,10 +85,13 @@ export default function ProjectDetailPage() {
     );
   }
 
+  if (!user) return null;
+
   const milestones = project.milestones || [];
   const confirmedCount = milestones.filter((m) => m.status === "confirmed").length;
   const allMilestonesConfirmed =
     milestones.length > 0 && confirmedCount === milestones.length;
+  const pendingDelivery = milestones.find((m) => m.verificationStatus === "pending");
 
   // Deadline calculation
   const deadlineDate = new Date(project.deadline);
@@ -90,89 +106,116 @@ export default function ProjectDetailPage() {
     ? "Due today"
     : `${diffDays} days remaining`;
 
-  // Resend kickoff / project confirmation email
-  const handleResendKickoffEmail = async () => {
-    setResendingEmail(true);
-    try {
-      await fetch("/api/email/send-client-confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: project.clientEmail,
-          clientName: project.clientName,
-          freelancerName: user.fullName,
-          projectTitle: project.title,
-          milestoneTitle: milestones[0]?.title || "Project Confirmation",
-          token: milestones[0]?.verificationToken || "token-resend",
-        }),
-      });
+  // Re-send the verification link for an already-submitted delivery. The link
+  // and its recipient come from the delivery row, not from this request body.
+  const handleResendVerification = async (milestoneId: string) => {
+    setResendingId(milestoneId);
+    const result = await sendVerificationRequest(project.id, milestoneId);
+    setResendingId(null);
 
+    if (result.sent) {
       toast({
-        title: "Confirmation link resent!",
-        description: `Dispatched client verification email to ${project.clientEmail}`,
+        title: "Verification link sent",
+        description: `Confirmation email dispatched to ${project.clientEmail}.`,
       });
-    } catch (e) {
+    } else {
       toast({
-        title: "Email dispatch failed",
-        description: "Could not send verification email. Please try again.",
+        title: "Email not sent",
+        description:
+          result.reason === "no-delivery"
+            ? "Submit this delivery first; a verification link only exists after a delivery is recorded."
+            : "We couldn't send the email right now. Try again in a moment.",
         variant: "destructive",
       });
-    } finally {
-      setResendingEmail(false);
     }
   };
 
-  // Mark as Complete button for milestone
-  const handleMarkMilestoneComplete = async (milestoneId: string, milestoneTitle: string, dueDate: string) => {
-    deliverMilestone(project.id, milestoneId);
+  // Records the delivery (the database mints its verification token), then asks
+  // the server to email the client's confirmation link.
+  const handleMarkMilestoneComplete = async (milestoneId: string, milestoneTitle: string) => {
+    setSubmittingId(milestoneId);
+    const delivery = await submitDelivery(project.id, milestoneId);
+    setSubmittingId(null);
 
-    const isSubmittedOnTime = new Date().getTime() <= new Date(dueDate).getTime();
-
-    // Call server email trigger endpoint
-    try {
-      const ms = milestones.find((m) => m.id === milestoneId);
-      await fetch("/api/email/send-client-confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: project.clientEmail,
-          clientName: project.clientName,
-          freelancerName: user.fullName,
-          milestoneTitle: milestoneTitle,
-          projectTitle: project.title,
-          token: ms?.verificationToken || `tok_${milestoneId}`,
-        }),
+    if (!delivery) {
+      toast({
+        title: "Delivery not recorded",
+        description: "We couldn't save this submission. Please try again.",
+        variant: "destructive",
       });
-    } catch (e) {
-      console.warn("Client email notify warning:", e);
+      return;
     }
 
-    logActivity({
-      title: `Submitted milestone '${milestoneTitle}'`,
-      description: `Delivery submitted ${isSubmittedOnTime ? "on-time" : "past due date"}. Awaiting client confirmation.`,
-      type: "milestone_delivered",
-    });
-
+    const email = await sendVerificationRequest(project.id, milestoneId);
     toast({
-      title: "Milestone Submitted! 📦",
-      description: `Client verification request sent to ${project.clientEmail}.`,
+      title: `Submitted "${milestoneTitle}"`,
+      description: email.sent
+        ? `Verification link emailed to ${project.clientEmail}.`
+        : "Recorded. Use “Send verification link” to email the client — the email did not go out automatically.",
+      variant: email.sent ? "default" : "destructive",
     });
   };
 
-  // Optional quick test trigger: Client confirms milestone directly from dashboard for preview testing
-  const handleQuickClientSignOff = (milestoneId: string, title: string) => {
-    confirmMilestone(project.id, milestoneId, "Verified delivery quality.");
+  // Adds a milestone to a project that already exists. The store writes the row
+  // and reloads, so the timeline shows it only once the insert succeeded.
+  const handleAddMilestone = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const title = milestoneDraft.title.trim();
+    if (title.length < 2) {
+      toast({
+        title: "Name the milestone",
+        description: "Give it a short title, such as \"Design handoff\".",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!milestoneDraft.dueDate) {
+      toast({
+        title: "Pick a deadline",
+        description: "The deadline is what the on-time factor compares against.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSavingMilestone(true);
+    let saved = false;
+    try {
+      saved = await addMilestone(project.id, {
+        title,
+        description: milestoneDraft.description.trim() || undefined,
+        dueDate: milestoneDraft.dueDate,
+        sortOrder: milestones.length,
+      });
+    } catch {
+      saved = false;
+    }
+    setSavingMilestone(false);
+
+    if (!saved) {
+      toast({
+        title: "Milestone not added",
+        description: "We couldn't save it. Nothing was added to this project.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setMilestoneDraft({ title: "", description: "", dueDate: "" });
+    setShowAddMilestone(false);
     toast({
-      title: `Milestone Confirmed! ✅`,
-      description: `Client confirmation for "${title}" recorded in the proof ledger.`,
+      title: "Milestone added",
+      description: `"${title}" is now in the timeline.`,
+      variant: "success",
     });
   };
 
   // Bottom action: Complete Project
-  const handleCompleteProject = () => {
+  const handleCompleteProject = async () => {
     setCompleting(true);
 
-    // Trigger canvas confetti celebration
     try {
       confetti({
         particleCount: 150,
@@ -184,25 +227,22 @@ export default function ProjectDetailPage() {
       console.warn("Confetti error:", confettiErr);
     }
 
-    completeProject(project.id);
+    await setProjectStatus(project.id, "completed");
+    setCompleting(false);
 
     toast({
-      title: "Project Completed! 🎉",
-      description: `Project "${project.title}" has been successfully completed and sealed in your Trust Score.`,
+      title: "Project completed",
+      description: `"${project.title}" is archived and counted in your Trust Score.`,
     });
-
-    setTimeout(() => {
-      setCompleting(false);
-    }, 800);
   };
 
   // Bottom action: Cancel Project
-  const handleCancelProject = () => {
-    cancelProject(project.id);
+  const handleCancelProject = async () => {
     setShowCancelDialog(false);
+    await setProjectStatus(project.id, "cancelled");
     toast({
-      title: "Project Cancelled",
-      description: "Project status updated to cancelled. Trust Score has been recalibrated.",
+      title: "Project cancelled",
+      description: "Status set to cancelled. Your Trust Score is recalculated.",
       variant: "destructive",
     });
     router.push("/dashboard/projects");
@@ -234,9 +274,13 @@ export default function ProjectDetailPage() {
                   <Badge variant="default" className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs py-0.5 px-2.5 font-mono uppercase">
                     COMPLETED
                   </Badge>
-                ) : project.status === "disputed" ? (
+                ) : project.status === "cancelled" ? (
                   <Badge variant="destructive" className="text-xs py-0.5 px-2.5 font-mono uppercase">
                     CANCELLED
+                  </Badge>
+                ) : project.status === "disputed" ? (
+                  <Badge variant="destructive" className="text-xs py-0.5 px-2.5 font-mono uppercase">
+                    DISPUTED
                   </Badge>
                 ) : isOverdue ? (
                   <Badge variant="destructive" className="text-xs py-0.5 px-2.5 font-mono uppercase">
@@ -252,27 +296,35 @@ export default function ProjectDetailPage() {
                   ID: {project.id}
                 </span>
 
-                {/* Client confirmed status badge */}
+                {/* Client verification status for the delivery in flight */}
                 {project.clientConfirmed ? (
                   <span className="text-xs font-semibold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>✅ Confirmed by Client</span>
+                    <span>Confirmed by client</span>
                   </span>
-                ) : (
+                ) : pendingDelivery ? (
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20 flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      <span>⏳ Waiting for confirmation</span>
+                      <span>Awaiting client verification</span>
                     </span>
                     <button
-                      onClick={handleResendKickoffEmail}
-                      disabled={resendingEmail}
+                      onClick={() => handleResendVerification(pendingDelivery.id)}
+                      disabled={resendingId === pendingDelivery.id}
                       className="text-[11px] text-electric hover:underline flex items-center gap-1 font-semibold"
                     >
-                      <RefreshCw className={`w-3 h-3 ${resendingEmail ? "animate-spin" : ""}`} />
-                      <span>Resend email</span>
+                      <RefreshCw
+                        className={`w-3 h-3 ${
+                          resendingId === pendingDelivery.id ? "animate-spin" : ""
+                        }`}
+                      />
+                      <span>Resend link</span>
                     </button>
                   </div>
+                ) : (
+                  <span className="text-xs font-semibold text-textSecondary bg-navyLight px-2.5 py-0.5 rounded-full border border-surfaceLight">
+                    No delivery submitted yet
+                  </span>
                 )}
               </div>
 
@@ -339,9 +391,24 @@ export default function ProjectDetailPage() {
               <span>Milestone Timeline</span>
             </h3>
             <p className="text-xs text-textSecondary mt-0.5">
-              Sequential deliverables. Submitting milestone delivers proof verification to client.
+              Sequential deliverables. Submitting a delivery sends your client a
+              one-time verification link; their confirmation is what counts toward
+              your Trust Score.
             </p>
           </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 border-surfaceLight shrink-0"
+            onClick={() => setShowAddMilestone(true)}
+            disabled={
+              project.status === "completed" || project.status === "cancelled"
+            }
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add milestone</span>
+          </Button>
         </div>
 
         {/* Visual Timeline (Vertical line with status dots) */}
@@ -448,32 +515,38 @@ export default function ProjectDetailPage() {
                       {m.status === "confirmed" ? (
                         <div className="flex items-center gap-1.5 text-xs font-bold text-[#00ff88] bg-[#00ff88]/10 px-3 py-1.5 rounded-lg border border-[#00ff88]/20 font-mono">
                           <CheckCircle2 className="w-4 h-4" />
-                          <span>Client Confirmed ✓</span>
+                          <span>Client confirmed</span>
                         </div>
-                      ) : m.status === "delivered" ? (
+                      ) : m.status === "disputed" ? (
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-red-400 bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20 font-mono">
+                          <AlertCircle className="w-4 h-4" />
+                          <span>Client disputed</span>
+                        </div>
+                      ) : m.verificationStatus === "pending" ? (
                         <div className="flex flex-col sm:items-end gap-1">
                           <span className="text-xs text-amber-400 font-semibold flex items-center gap-1">
                             <Clock className="w-3.5 h-3.5" />
-                            <span>Submitted & Sent</span>
+                            <span>Submitted, awaiting client</span>
                           </span>
                           <button
-                            onClick={() => handleQuickClientSignOff(m.id, m.title)}
+                            onClick={() => handleResendVerification(m.id)}
+                            disabled={resendingId === m.id}
                             className="text-[11px] text-electric hover:underline text-left sm:text-right"
-                            title="Simulate client approving verification link"
                           >
-                            Simulate client sign-off (Demo) →
+                            {resendingId === m.id ? "Sending…" : "Resend verification link →"}
                           </button>
                         </div>
                       ) : (
-                        /* "Mark as Complete" button (if pending/in_progress) */
+                        /* "Submit delivery" button (pending / in progress) */
                         <Button
                           size="sm"
                           variant="electric"
                           className="font-bold text-xs gap-1.5 h-9"
-                          onClick={() => handleMarkMilestoneComplete(m.id, m.title, m.dueDate)}
+                          disabled={submittingId === m.id}
+                          onClick={() => handleMarkMilestoneComplete(m.id, m.title)}
                         >
                           <Send className="w-3.5 h-3.5" />
-                          <span>Mark as Complete</span>
+                          <span>{submittingId === m.id ? "Submitting…" : "Submit delivery"}</span>
                         </Button>
                       )}
                     </div>
@@ -492,8 +565,8 @@ export default function ProjectDetailPage() {
             <h4 className="text-sm font-bold text-white">Project Actions</h4>
             <p className="text-xs text-textSecondary mt-0.5">
               {allMilestonesConfirmed
-                ? "All milestones are cryptographically signed off by your client! Ready to seal completion."
-                : "Deliver and confirm all milestones above to enable project completion."}
+                ? "Every milestone is confirmed by your client. Completing the project adds it to your finished work."
+                : "Submit and have each milestone confirmed above to enable project completion."}
             </p>
           </div>
 
@@ -515,7 +588,7 @@ export default function ProjectDetailPage() {
             {project.status === "completed" ? (
               <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-500/30 font-mono">
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Project Fully Completed & Sealed</span>
+                <span>Completed & counted</span>
               </div>
             ) : (
               <Button
@@ -526,7 +599,7 @@ export default function ProjectDetailPage() {
                 className="font-bold text-xs gap-2 h-9 px-5 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Sparkles className="w-4 h-4" />
-                <span>{completing ? "Sealing Project..." : "Complete Project 🎉"}</span>
+                <span>{completing ? "Completing…" : "Complete project"}</span>
               </Button>
             )}
           </div>
@@ -544,14 +617,18 @@ export default function ProjectDetailPage() {
               Cancel Project Engagement?
             </DialogTitle>
             <DialogDescription className="text-sm text-slate-300 pt-1">
-              Cancelling affects your Trust Score. Ghost rate will increase and your on-time score will be penalized.
+              A cancelled project lowers the &ldquo;no cancelled work&rdquo; part
+              of your Trust Score (20 of 100 points). Confirmed deliveries stay on
+              your account either way.
             </DialogDescription>
           </DialogHeader>
 
           <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-300 space-y-1">
-            <p className="font-semibold">⚠️ Reputational Warning:</p>
+            <p className="font-semibold">Before you cancel:</p>
             <p>
-              Voucht records unfulfilled client deliverables on the public trust ledger. Only cancel if both parties have agreed to mutually terminate.
+              Cancel only when you and the client have agreed to end the
+              engagement. A cancelled project is never shown as a verified
+              delivery on your public page.
             </p>
           </div>
 
@@ -571,6 +648,90 @@ export default function ProjectDetailPage() {
               Yes, Cancel Project
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Add Milestone Dialog */}
+      <Dialog open={showAddMilestone} onOpenChange={setShowAddMilestone}>
+        <DialogContent className="border-surfaceLight bg-surface text-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-white">
+              Add a milestone
+            </DialogTitle>
+            <DialogDescription className="text-sm text-slate-300 pt-1">
+              It appears in the timeline as pending. A milestone only counts
+              towards your Trust Score after your client confirms its delivery.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleAddMilestone} className="space-y-4 mt-2">
+            <div className="space-y-2">
+              <Label htmlFor="ms-title" className="text-xs font-semibold text-white">
+                Milestone title
+              </Label>
+              <Input
+                id="ms-title"
+                value={milestoneDraft.title}
+                onChange={(e) =>
+                  setMilestoneDraft((d) => ({ ...d, title: e.target.value }))
+                }
+                placeholder="Design handoff"
+                maxLength={80}
+                className="h-10 bg-navyLight border-surfaceLight text-white text-sm"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ms-due" className="text-xs font-semibold text-white">
+                Deadline
+              </Label>
+              <Input
+                id="ms-due"
+                type="date"
+                value={milestoneDraft.dueDate}
+                onChange={(e) =>
+                  setMilestoneDraft((d) => ({ ...d, dueDate: e.target.value }))
+                }
+                className="h-10 bg-navyLight border-surfaceLight text-white text-sm"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ms-desc" className="text-xs font-semibold text-white">
+                What counts as done? <span className="text-textSecondary font-normal">(optional)</span>
+              </Label>
+              <Input
+                id="ms-desc"
+                value={milestoneDraft.description}
+                onChange={(e) =>
+                  setMilestoneDraft((d) => ({ ...d, description: e.target.value }))
+                }
+                placeholder="Figma file handed over, all screens covered"
+                maxLength={160}
+                className="h-10 bg-navyLight border-surfaceLight text-white text-sm"
+              />
+            </div>
+
+            <DialogFooter className="flex flex-col sm:flex-row gap-2 mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowAddMilestone(false)}
+                className="border-surfaceLight text-textSecondary text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="electric"
+                disabled={savingMilestone}
+                className="text-xs font-bold"
+              >
+                {savingMilestone ? "Saving…" : "Add milestone"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

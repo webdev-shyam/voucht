@@ -12,35 +12,35 @@ interface FaqItem {
 const FAQS: FaqItem[] = [
   {
     q: "How is the Trust Score calculated?",
-    a: "Your Trust Score (0-100) is calculated algorithmically using four verifiable factors: On-Time Delivery Rate (35%), Client Milestone Confirmations (30%), Dispute-Free History (20%), and Platform Longevity & Volume (15%). Unlike static review scores, it updates in real time with each delivered milestone.",
+    a: "The score is one number out of 100, calculated by the database from your recorded work: completed projects (40 points), on-time client-confirmed deliveries (25 points), no cancelled projects (20 points), and track record volume (15 points, capped). It recalculates after every confirmed delivery, is stored in one place, and no client or URL parameter can write to it. Until a client confirms a delivery, your page shows \"No verified work history yet\" instead of a number.",
   },
   {
     q: "Is it really free?",
-    a: "Yes! Our Free plan lets you manage 1 active project, receive client sign-offs, generate a basic Trust Score, and host your public Proof Page forever with zero credit card required.",
+    a: "Yes. The free plan keeps 1 active project, sends client confirmation links, calculates your Trust Score, and hosts your public Proof Page for as long as your account exists. No credit card is required to start.",
   },
   {
     q: "What if a client doesn't confirm delivery?",
-    a: "Voucht automatically sends polite follow-up reminders. In addition, clients do not need to sign up or create an account — they confirm deliverables with a single tap from their email. If a client remains unresponsive after 14 days without opening a dispute, the delivery defaults to verified.",
+    a: "Clients never need an account: they open a single-tap confirmation link sent to their email, and you get reminders for milestones that are still awaiting a reply. A delivery that is not confirmed simply does not count towards your score. It is never marked verified automatically, so your page only shows proof a client actually agreed to.",
   },
   {
     q: "Can I use Voucht with any platform (Upwork, Fiverr, direct clients)?",
-    a: "Absolutely. Voucht works independently with direct clients, agency retainers, and platform gigs. You can link your public Proof Page on Upwork proposals, LinkedIn profiles, personal portfolios, and email signatures.",
+    a: "Yes. Voucht records the deliverables and deadlines you enter yourself, so it works for direct clients, agency retainers and platform gigs alike. You share one Proof Page link on Upwork proposals, LinkedIn, your portfolio, or your email signature.",
   },
   {
     q: "How is this different from reviews?",
-    a: "Reviews can be bought, friends can write fake 5-star testimonials, and ratings can be manipulated. Voucht verifies cryptographically signed delivery receipts tied to real project deliverables, timestamps, and client email domains.",
+    a: "A review is a text claim anyone can write. A Voucht record is a dated delivery that a specific client confirmed from their own email link, tied to a milestone deadline and a timestamp. The score is derived from those records, not from star ratings, so it cannot be inflated by friends or bought accounts.",
   },
   {
     q: "Can clients see my score before hiring me?",
-    a: "Yes! That is the core superpower of Voucht. Send prospects your Proof Page link or embed your live SVG badge on your portfolio so clients see your proven reliability before ever signing a contract.",
+    a: "Yes, that is the point. Send prospects your Proof Page link or embed the live SVG badge on your portfolio; it reads the same stored score your dashboard shows, and refreshes within minutes of new confirmed work.",
   },
   {
     q: "What happens if I miss a deadline?",
-    a: "If a milestone deadline is extended mutually with your client, your on-time score is preserved. If an uncommunicated delay occurs, your score adjusts proportionally but can be redeemed through consistent future on-time deliveries.",
+    a: "A late confirmed delivery counts against the on-time factor, so the score drops. A project you cancel counts against the no-cancelled-work factor. There is a 24 hour grace window, and both factors recover as later deliveries land on time.",
   },
   {
     q: "Is my data safe?",
-    a: "Yes. All data is protected with enterprise-grade encryption at rest and in transit. Client contact emails are never sold, shared, or spammed. You have full control over which client names or financial figures are publicly displayed or masked.",
+    a: "Your data lives in a Postgres database with row-level security, so you only ever read and write your own rows, and traffic is encrypted in transit. Client emails and confirmation tokens exist to run the verification flow and are never shown on a public page; public surfaces show a masked name such as \"S***a J.\". There is no self-service delete button yet, so email hello@voucht.tech to remove a project or your whole account, and we do that by hand.",
   },
 ];
 

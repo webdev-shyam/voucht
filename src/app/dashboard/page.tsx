@@ -16,7 +16,8 @@ import { useProjects } from "@/hooks/useProjects";
 export default function DashboardPage() {
   const user = useAppStore((state) => state.user);
   const activities = useAppStore((state) => state.activities);
-  const { score, factors } = useTrustScore();
+  const profileViews = useAppStore((state) => state.profileViews);
+  const { hasHistory, onTimeRate } = useTrustScore();
   const { projects, activeProjects } = useProjects();
 
   const completedProjects = projects.filter((p) => p.status === "completed");
@@ -25,23 +26,16 @@ export default function DashboardPage() {
     <div className="space-y-8 pb-12">
       {/* SECTION 1 — Trust Score Hero Card (full width) */}
       <section>
-        <TrustScoreHero
-          score={user.trustScore || score || 78}
-          deliveryRate={85}
-          onTimeRate={factors.onTimeDelivery || 92}
-          responseSpeedHours={4.2}
-          revisionRatio={1.2}
-          ghostRate={0}
-        />
+        <TrustScoreHero />
       </section>
 
       {/* SECTION 2 — Stats Cards Row (4 cards) */}
       <section>
         <StatsCards
-          totalProjects={projects.length}
-          completedCount={completedProjects.length}
-          onTimeRate={factors.onTimeDelivery || 92}
-          profileViews={user.tier === "elite" ? 342 : undefined}
+          totalProjects={user?.totalProjects ?? projects.length}
+          completedCount={user?.completedProjects ?? completedProjects.length}
+          onTimeRate={hasHistory ? onTimeRate : null}
+          profileViews={profileViews}
         />
       </section>
 
@@ -82,7 +76,8 @@ export default function DashboardPage() {
                     No active projects yet
                   </h4>
                   <p className="text-xs text-textSecondary mt-1">
-                    Start establishing your verified on-chain and off-chain milestone ledger.
+                    Record a project and its milestones, then send each delivery to
+                    your client for confirmation.
                   </p>
                 </div>
                 <Button asChild size="sm" variant="electric" className="mt-2">
@@ -99,9 +94,9 @@ export default function DashboardPage() {
         <div className="lg:col-span-5 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <span>Recent Activity Feed</span>
+              <span>Recent Activity</span>
               <span className="text-[10px] font-mono text-electric bg-electric/10 px-2 py-0.5 rounded border border-electric/20">
-                LIVE
+                {activities.length} EVENTS
               </span>
             </h3>
           </div>
