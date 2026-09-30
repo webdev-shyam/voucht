@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Lock, Mail } from "lucide-react";
@@ -26,6 +26,68 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
+  // Supabase refuses password sign-in until the address is confirmed; the form
+  // then needs a way to re-send the link rather than a dead-end error.
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+
+  const handleResendConfirmation = async () => {
+    if (!unconfirmedEmail || !isSupabaseConfigured()) return;
+    setResending(true);
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: unconfirmedEmail,
+        options: {
+          emailRedirectTo: `${window.location.origin}/callback?next=%2Fdashboard`,
+        },
+      });
+
+      toast(
+        error
+          ? {
+              title: "Could not resend the link",
+              description: error.message,
+              variant: "destructive",
+            }
+          : {
+              title: "Confirmation link sent",
+              description: "Check your inbox, and your spam folder if it is not there.",
+            }
+      );
+    } catch (err: unknown) {
+      toast({
+        title: "Could not resend the link",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setResending(false);
+    }
+  };
+
+  // /callback redirects here with ?error= when the provider exchange fails. Without
+  // surfacing it a failed sign-in looks like a silent bounce back to the form.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("error");
+    if (!raw) return;
+
+    toast({
+      title: "Sign-in did not complete",
+      description:
+        raw === "missing_oauth_code"
+          ? "The provider returned no authorisation code. Google sign-in is usually not enabled, or this URL is missing from its redirect allow-list."
+          : raw.replace(/_/g, " "),
+      variant: "destructive",
+    });
+
+    // Clear ?error= but keep ?next= so the deep link survives the failed attempt.
+    const next = params.get("next");
+    router.replace(next ? `/login?next=${encodeURIComponent(next)}` : "/login");
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,14 +102,26 @@ export default function LoginPage() {
         });
 
         if (error) {
-          toast({
-            title: "Authentication Failed",
-            description: error.message,
-            variant: "destructive",
-          });
+          if (/email not confirmed|not confirmed/i.test(error.message)) {
+            setUnconfirmedEmail(email.trim().toLowerCase());
+            toast({
+              title: "Confirm your email first",
+              description:
+                "Your account was created, but sign-in stays blocked until you open the confirmation link we sent.",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Authentication Failed",
+              description: error.message,
+              variant: "destructive",
+            });
+          }
           setLoading(false);
           return;
         }
+
+        setUnconfirmedEmail(null);
 
         toast({
           title: "Welcome back!",
@@ -190,6 +264,30 @@ export default function LoginPage() {
           </CardHeader>
 
           <CardContent className="space-y-5">
+            {unconfirmedEmail ? (
+              <div className="flex items-start gap-3 rounded-xl border border-[#00ff88]/30 bg-[#00ff88]/5 p-4">
+                <Mail className="w-5 h-5 text-[#00ff88] shrink-0 mt-0.5" />
+                <div className="space-y-1.5">
+                  <p className="text-xs text-[#a0a0b8] leading-relaxed">
+                    A confirmation link was sent to{" "}
+                    <span className="text-white font-semibold">
+                      {unconfirmedEmail}
+                    </span>
+                    . Open it to activate the account, then log in again.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleResendConfirmation}
+                    disabled={resending}
+                    className="text-xs font-semibold text-[#00ff88] hover:underline disabled:opacity-60"
+                  >
+                    {resending
+                      ? "Sending a new link..."
+                      : "Resend the confirmation link"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-white text-xs font-semibold">

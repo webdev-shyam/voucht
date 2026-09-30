@@ -56,6 +56,47 @@ export default function SignupPage() {
   const [skill, setSkill] = useState(SKILLS[0]);
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
+  // Set once signUp returns without a session, i.e. email confirmation is on.
+  const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+
+  const confirmationRedirect = () =>
+    `${window.location.origin}/callback?next=%2Fdashboard`;
+
+  const handleResendConfirmation = async () => {
+    if (!confirmationEmail || !isSupabaseConfigured()) return;
+    setResending(true);
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: confirmationEmail,
+        options: { emailRedirectTo: confirmationRedirect() },
+      });
+
+      toast(
+        error
+          ? {
+              title: "Could not resend the link",
+              description: error.message,
+              variant: "destructive",
+            }
+          : {
+              title: "Confirmation link sent",
+              description: "Check your inbox, and your spam folder if it is not there.",
+            }
+      );
+    } catch (err: unknown) {
+      toast({
+        title: "Could not resend the link",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setResending(false);
+    }
+  };
 
   const strength = calculatePasswordStrength(password);
 
@@ -76,6 +117,11 @@ export default function SignupPage() {
           email,
           password,
           options: {
+            // Without this the confirmation link opens the site root, the
+            // visitor sees the landing page and no session is created. The
+            // exact URL must also be listed in Supabase → URL Configuration →
+            // Redirect URLs.
+            emailRedirectTo: confirmationRedirect(),
             data: {
               full_name: fullName,
               username,
@@ -98,11 +144,7 @@ export default function SignupPage() {
         // visitor to the dashboard then shows an empty shell that immediately
         // bounces back to /login.
         if (!data.session) {
-          toast({
-            title: "Check your inbox",
-            description:
-              "We sent a confirmation link to your email. Open it to activate your account, then log in.",
-          });
+          setConfirmationEmail(email.trim().toLowerCase());
           setLoading(false);
           return;
         }
@@ -206,6 +248,43 @@ export default function SignupPage() {
           </CardHeader>
 
           <CardContent className="space-y-5">
+            {confirmationEmail ? (
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 rounded-xl border border-[#00ff88]/30 bg-[#00ff88]/5 p-4">
+                  <CheckCircle2 className="w-5 h-5 text-[#00ff88] shrink-0 mt-0.5" />
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-bold text-white">
+                      One more step: confirm your email
+                    </p>
+                    <p className="text-xs text-[#a0a0b8] leading-relaxed">
+                      We sent a link to{" "}
+                      <span className="text-white font-semibold">
+                        {confirmationEmail}
+                      </span>
+                      . The account exists but stays locked until you open that
+                      link and log in.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleResendConfirmation}
+                      disabled={resending}
+                      className="text-xs font-semibold text-[#00ff88] hover:underline pt-1 disabled:opacity-60"
+                    >
+                      {resending
+                        ? "Sending a new link..."
+                        : "Didn't get it? Resend the link"}
+                    </button>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full h-10 text-xs font-semibold border-white/10 bg-white/5 text-white rounded-xl"
+                  onClick={() => setConfirmationEmail(null)}
+                >
+                  Use a different email
+                </Button>
+              </div>
+            ) : (
             <form onSubmit={handleSignup} className="space-y-4">
               {/* Full Name */}
               <div className="space-y-2">
@@ -348,6 +427,7 @@ export default function SignupPage() {
                 {loading ? "Creating your account..." : "Create Account"}
               </Button>
             </form>
+            )}
 
             <div className="relative my-4">
               <div className="absolute inset-0 flex items-center">

@@ -85,6 +85,9 @@ OPENROUTER_API_KEY=
 RESEND_API_KEY=re_your_resend_api_key
 
 # Payment providers
+# Card checkout is per plan: CREEM_PRODUCT_ID_PRO enables Pro only, and Elite
+# needs its own id. A missing id shows "Card checkout unavailable" in the UI
+# instead of a checkout that cannot be paid.
 CREEM_API_KEY=your_creem_api_key
 CREEM_PRODUCT_ID_PRO=prod_...
 CREEM_PRODUCT_ID_ELITE=prod_...
@@ -114,7 +117,12 @@ Apply in order in the Supabase SQL editor (or `supabase db push`):
    `mask_client_name()`, `recalculate_trust_score()` and its triggers, and the
    `get_verification_request()` / `record_verification()` RPCs.
 
-Both files are safe to re-run. Regenerate `src/lib/types.ts` afterwards:
+Both files are safe to re-run. Then run `supabase/verify.sql` as a third,
+read-only query: it lists the tables, views, policies, functions, triggers and
+grants that must exist, each with its expected result, so a silently rolled-back
+batch is visible instead of surfacing later as a broken dashboard.
+
+Regenerate `src/lib/types.ts` afterwards:
 
 ```bash
 npx supabase gen types typescript --linked > src/lib/types.gen.ts
@@ -123,7 +131,41 @@ npx supabase gen types typescript --linked > src/lib/types.gen.ts
 The hand-maintained `src/lib/types.ts` mirrors the schema; keep the two in step
 when a migration adds a column.
 
-### 4. Run Development Server
+### 4. Supabase Auth configuration
+
+Everything here is dashboard state, not code — the app cannot supply it.
+
+**Redirect allowlist** — Authentication → URL Configuration → Redirect URLs:
+
+```
+http://localhost:3000/callback
+https://voucht.tech/callback
+```
+
+`/callback` is the only route that exchanges an OAuth or email-confirmation
+code for a session, so a missing entry makes Google sign-in bounce back without
+a visible error. Site URL must be `https://voucht.tech` in production, otherwise
+confirmation links open the wrong host.
+
+**Google** — Authentication → Sign In / Providers → Google: enabled, with the
+OAuth client's redirect URI set to
+`https://<project-ref>.supabase.co/auth/v1/callback`. The client secret lives in
+Supabase only; it is never an environment variable of this app.
+
+**Emails from your own domain** — Authentication → SMTP Settings: enable it and
+point it at your transactional provider (Resend: host `smtp.resend.com`, port
+`465`, user `resend`, password = the Resend API key). Set Sender email to an
+address on a domain you have DNS-verified there, e.g.
+`Voucht <hello@voucht.tech>`. Until SMTP is enabled, Supabase sends through its
+own `noreply@mail.app.supabase.io`, which is why confirmations do not look like
+they came from Voucht.
+
+**Require confirmation** — Authentication → Providers → Email: "Confirm email"
+ON. `signUp` then returns no session and the signup screen shows the
+check-your-inbox step; password sign-in stays blocked with "Email not confirmed"
+until the link is opened, and the login screen offers a resend.
+
+### 5. Run Development Server
 
 ```bash
 npm install

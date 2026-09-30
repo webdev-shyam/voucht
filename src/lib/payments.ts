@@ -54,9 +54,20 @@ function creemProductId(plan: PaidPlan): string | null {
   );
 }
 
-export function isCreemConfigured(): boolean {
-  const config = getCreemConfig();
-  return !!config && !!creemProductId("pro") && !!creemProductId("elite");
+// CREEM has one product id per plan, so a deployment can sell Pro while Elite is
+// still being set up. Reporting availability all-or-nothing made that read as
+// "card payments are not set up" even with a working Pro product.
+export function creemPlanAvailability(): Record<PaidPlan, boolean> {
+  const hasKey = !!getCreemConfig();
+  return {
+    pro: hasKey && !!creemProductId("pro"),
+    elite: hasKey && !!creemProductId("elite"),
+  };
+}
+
+export function isCreemConfigured(plan?: PaidPlan): boolean {
+  const availability = creemPlanAvailability();
+  return plan ? availability[plan] : availability.pro || availability.elite;
 }
 
 export async function createCreemCheckout(
