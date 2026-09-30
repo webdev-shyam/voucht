@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Check,
@@ -31,6 +31,11 @@ interface UpgradeModalProps {
   description?: string;
 }
 
+interface ProviderAvailability {
+  creem: { pro: boolean; elite: boolean };
+  nowpayments: boolean;
+}
+
 export function UpgradeModal({
   open,
   onOpenChange,
@@ -41,6 +46,28 @@ export function UpgradeModal({
   const router = useRouter();
   const [selectedPlan, setSelectedPlan] = useState<"pro" | "elite">("pro");
   const [loadingProvider, setLoadingProvider] = useState<"creem" | "nowpayments" | null>(null);
+  const [availability, setAvailability] = useState<ProviderAvailability | null>(null);
+
+  // Same server-side source the billing page uses, so a gateway that is not
+  // configured is visibly unavailable here instead of failing after the click.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void fetch("/api/checkout/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setAvailability(data as ProviderAvailability);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailability({ creem: { pro: false, elite: false }, nowpayments: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const cardUnavailable = availability?.creem?.[selectedPlan] === false;
+  const cryptoUnavailable = availability?.nowpayments === false;
 
   const getFeatureHeading = () => {
     if (title) return title;
@@ -240,7 +267,7 @@ export function UpgradeModal({
               <Button
                 variant="electric"
                 className="w-full font-bold h-11 text-xs gap-2 shadow-md bg-electric text-navy hover:bg-electric/90"
-                disabled={loadingProvider !== null}
+                disabled={loadingProvider !== null || cardUnavailable}
                 onClick={() => handleCheckout("creem")}
               >
                 {loadingProvider === "creem" ? (
@@ -248,14 +275,18 @@ export function UpgradeModal({
                 ) : (
                   <CreditCard className="w-4 h-4 shrink-0" />
                 )}
-                <span>💳 Pay with Card — ${activePrice}/mo</span>
+                <span>
+                  {cardUnavailable
+                    ? "Card checkout unavailable"
+                    : `Pay with Card — $${activePrice}/mo`}
+                </span>
               </Button>
 
               {/* Option 2: Crypto via NOWPayments */}
               <Button
                 variant="outline"
                 className="w-full font-bold h-11 text-xs gap-2 border-surfaceLight bg-surface hover:bg-surfaceLight hover:text-white text-slate-200"
-                disabled={loadingProvider !== null}
+                disabled={loadingProvider !== null || cryptoUnavailable}
                 onClick={() => handleCheckout("nowpayments")}
               >
                 {loadingProvider === "nowpayments" ? (
@@ -263,9 +294,20 @@ export function UpgradeModal({
                 ) : (
                   <Coins className="w-4 h-4 text-amber-400 shrink-0" />
                 )}
-                <span>🪙 Pay with Crypto — ${activePrice}/mo</span>
+                <span>
+                  {cryptoUnavailable
+                    ? "Crypto checkout unavailable"
+                    : `Pay with Crypto — $${activePrice}/mo`}
+                </span>
               </Button>
             </div>
+
+            {cardUnavailable && cryptoUnavailable ? (
+              <p className="text-[11px] text-textSecondary leading-relaxed">
+                No payment gateway is connected to this deployment yet, so nothing was charged and
+                your plan is unchanged. Your current access stays as it is.
+              </p>
+            ) : null}
           </div>
 
           {/* Billing note */}

@@ -9,16 +9,20 @@ const bodySchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    if (!isCreemConfigured()) {
-      return NextResponse.json(
-        { ok: false, reason: "not-configured", error: "Card payments are not set up yet." },
-        { status: 503 }
-      );
-    }
-
-    const parsed = bodySchema.safeParse(await request.json());
+    const parsed = bodySchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
       return NextResponse.json({ ok: false, error: "Choose the Pro or Elite plan." }, { status: 400 });
+    }
+
+    if (!isCreemConfigured(parsed.data.plan)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          reason: "not-configured",
+          error: `Card checkout for the ${parsed.data.plan} plan is not set up yet.`,
+        },
+        { status: 503 }
+      );
     }
 
     const supabase = createClient();

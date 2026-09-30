@@ -38,7 +38,7 @@ import { toast } from "@/components/ui/use-toast";
 type PaidPlanId = "pro" | "elite";
 
 interface ProviderAvailability {
-  creem: boolean;
+  creem: { pro: boolean; elite: boolean };
   nowpayments: boolean;
 }
 
@@ -76,7 +76,7 @@ function BillingContent() {
         if (!cancelled && data) setAvailability(data as ProviderAvailability);
       })
       .catch(() => {
-        if (!cancelled) setAvailability({ creem: false, nowpayments: false });
+        if (!cancelled) setAvailability({ creem: { pro: false, elite: false }, nowpayments: false });
       });
     return () => {
       cancelled = true;
@@ -304,7 +304,8 @@ function BillingContent() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
             {PRICING_PLANS.map((plan) => {
               const isCurrent = user.tier === plan.id;
-              const isPaid = plan.id === "pro" || plan.id === "elite";
+              const cardUnavailable =
+                availability?.creem?.[plan.id as PaidPlanId] === false;
 
               return (
                 <Card
@@ -374,9 +375,7 @@ function BillingContent() {
                           variant="electric"
                           className="w-full text-xs font-bold h-10 gap-2 shadow-sm bg-electric text-navy hover:bg-electric/90"
                           disabled={
-                            isCurrent ||
-                            loadingAction !== null ||
-                            availability?.creem === false
+                            isCurrent || loadingAction !== null || cardUnavailable
                           }
                           onClick={() => void startCheckout("creem", plan.id as PaidPlanId)}
                         >
@@ -386,7 +385,7 @@ function BillingContent() {
                             <CreditCard className="w-3.5 h-3.5 shrink-0" />
                           )}
                           <span>
-                            {availability?.creem === false
+                            {cardUnavailable
                               ? "Card checkout unavailable"
                               : `Pay with card — $${plan.price}/mo`}
                           </span>
