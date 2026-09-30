@@ -117,7 +117,12 @@ Apply in order in the Supabase SQL editor (or `supabase db push`):
    `mask_client_name()`, `recalculate_trust_score()` and its triggers, and the
    `get_verification_request()` / `record_verification()` RPCs.
 
-Both files are safe to re-run. Regenerate `src/lib/types.ts` afterwards:
+Both files are safe to re-run. Then run `supabase/verify.sql` as a third,
+read-only query: it lists the tables, views, policies, functions, triggers and
+grants that must exist, each with its expected result, so a silently rolled-back
+batch is visible instead of surfacing later as a broken dashboard.
+
+Regenerate `src/lib/types.ts` afterwards:
 
 ```bash
 npx supabase gen types typescript --linked > src/lib/types.gen.ts
