@@ -43,7 +43,13 @@ export async function POST(request: Request) {
 
     if (!result.ok) {
       return NextResponse.json(
-        { ok: false, reason: result.reason, error: "We could not start the checkout. Please try again." },
+        {
+          ok: false,
+          reason: result.reason,
+          error:
+            result.detail ??
+            "We could not start the checkout. Please try again.",
+        },
         { status: result.reason === "not-configured" ? 503 : 502 }
       );
     }

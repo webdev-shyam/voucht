@@ -40,7 +40,8 @@ export async function POST(request: Request) {
         {
           ok: false,
           reason: result.reason,
-          error: "We could not create the invoice. Please try again.",
+          error:
+            result.detail ?? "We could not create the invoice. Please try again.",
         },
         { status: result.reason === "not-configured" ? 503 : 502 }
       );

@@ -1,6 +1,14 @@
 export const APP_NAME = "Voucht";
 export const APP_TAGLINE = "Verifiable Trust Engine for Freelancers & Agencies";
-export const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://voucht.tech";
+
+// `voucht.tech` answers with a 308 to `www.voucht.tech`, so www is the origin the
+// app is actually served from. Third-party callbacks must name it: a webhook or
+// IPN posted to the apex gets redirected, providers do not follow a redirect on
+// a POST, and the payment then looks like it vanished. Override with
+// NEXT_PUBLIC_APP_URL per deployment; keep it equal to the Supabase Site URL.
+export const SITE_ORIGIN = "https://www.voucht.tech";
+
+export const APP_URL = process.env.NEXT_PUBLIC_APP_URL || SITE_ORIGIN;
 
 // Badge tiers and their thresholds live in src/lib/trust-score.ts (BADGE_TIERS),
 // which mirrors the single database implementation of the score.

@@ -195,7 +195,55 @@ dismissible banner, so note the code before dismissing it — `bad_oauth_state`
 means a used-up or expired attempt (retry from `/login`), while
 `provider_callback_failed` means the Supabase and Google redirect URIs disagree.
 
-### 5. Run Development Server
+### 5. Enable payments
+
+Both providers are off until their variables exist in **Vercel → the project →
+Settings → Environment Variables → Production** (then redeploy). The app never
+fakes a successful payment: `/api/checkout/status` reports what is actually
+wired up, and the upgrade dialog disables the matching button.
+
+Check what a deployment currently sees:
+
+```bash
+curl -s https://www.voucht.tech/api/checkout/status
+# {"creem":{"pro":false,"elite":false},"nowpayments":false}
+```
+
+**Cards — CREEM.** Needs three values, and checkout is enabled **per plan**:
+
+| Variable | Where it comes from |
+| --- | --- |
+| `CREEM_API_KEY` | CREEM dashboard → Developers. A key starting with `creem_test_` automatically targets the test API. |
+| `CREEM_PRODUCT_ID_PRO` | the Pro product's id, `prod_…` |
+| `CREEM_PRODUCT_ID_ELITE` | the Elite product's id — a second product, not the same one |
+| `CREEM_WEBHOOK_SECRET` | the signing secret of the webhook below |
+
+Create the webhook in CREEM pointing at
+`https://www.voucht.tech/api/webhooks/creem` and subscribe it to
+`checkout.success` and `subscription.*`. Only that signed webhook activates a
+plan — the success redirect carries a signature that proves where the visitor
+came from, and nothing more.
+
+**Crypto — NOWPayments.** Needs `NOWPAYMENTS_API_KEY` **and**
+`NOWPAYMENTS_IPN_SECRET`; with either missing the method reports itself
+unavailable. Set the IPN/Webhook URL in NOWPayments to
+`https://www.voucht.tech/api/webhooks/nowpayments`. Leave
+`NOWPAYMENTS_SANDBOX` unset or `false` in production: setting it to `true`
+sends a live API key to the sandbox host, which rejects it, and that mismatch
+was previously indistinguishable from any other failure.
+
+**`APP_URL` / `NEXT_PUBLIC_APP_URL` must be `https://www.voucht.tech`, not the
+apex.** These values build the `ipn_callback_url` and the success/cancel URLs.
+`voucht.tech` answers with a `308` to `www.voucht.tech`, payment providers do
+not follow a redirect on a `POST`, and the invoice is then paid on their side
+while this app never hears about it.
+
+A provider error now names the part that failed — `CREEM rejected the API key
+for its live environment (HTTP 401)` versus `NOWPayments refused the payment
+request (HTTP 400)` — instead of the generic "could not create the invoice".
+The provider's raw response body stays in the Vercel function logs.
+
+### 6. Run Development Server
 
 ```bash
 npm install

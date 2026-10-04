@@ -1,15 +1,50 @@
 import crypto from "crypto";
+import { SITE_ORIGIN } from "@/lib/constants";
 
-const APP_URL =
-  process.env.APP_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  "https://voucht.tech";
+// Server-side mirror of the site origin; see the note in src/lib/constants.ts on
+// why this has to be the host the app is really served from.
+const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || SITE_ORIGIN;
 
 export type PaidPlan = "pro" | "elite";
 
 // Single source of truth for subscription pricing, shared by checkout, the
 // webhooks and the billing screen.
 export const PLAN_PRICES: Record<PaidPlan, number> = { pro: 10, elite: 29 };
+
+// A provider rejection is worth showing the visitor, but only in mapped form:
+// the response body can echo account and order data back at us, and the raw
+// text would then leave this server through the browser. The status code and
+// the public API host name are enough to act on — a 401 against the sandbox
+// host means a live key was pasted into a sandbox deployment, which is the
+// single most common way this fails.
+function describeHttpFailure(
+  provider: "CREEM" | "NOWPayments",
+  status: number,
+  baseUrl: string
+): string {
+  const environment = baseUrl.includes("sandbox")
+    ? "sandbox"
+    : baseUrl.includes("test-")
+      ? "test"
+      : "live";
+
+  if (status === 401 || status === 403) {
+    return `${provider} rejected the API key for its ${environment} environment (HTTP ${status}). Check that the key and the endpoint belong to the same environment.`;
+  }
+  if (status === 404) {
+    return `${provider} has no such endpoint at ${baseUrl} (HTTP 404).`;
+  }
+  if (status === 400 || status === 422) {
+    return `${provider} refused the payment request (HTTP ${status}). The plan price, currency or product id is not valid on the account.`;
+  }
+  if (status === 429) {
+    return `${provider} rate-limited the request (HTTP 429). Try again in a minute.`;
+  }
+  if (status >= 500) {
+    return `${provider} is unavailable right now (HTTP ${status}). Try again shortly.`;
+  }
+  return `${provider} responded HTTP ${status}.`;
+}
 
 // This project compiles with `strict: false`, so a discriminated union would
 // not narrow at the call sites. One flat result object keeps `ok`/`reason`
@@ -101,7 +136,11 @@ export async function createCreemCheckout(
     if (!res.ok) {
       const detail = await res.text();
       console.error("CREEM checkout failed:", res.status, detail.slice(0, 400));
-      return { ok: false, reason: "provider-error", detail: `CREEM responded ${res.status}` };
+      return {
+        ok: false,
+        reason: "provider-error",
+        detail: describeHttpFailure("CREEM", res.status, config.baseUrl),
+      };
     }
 
     const data = (await res.json()) as { checkout_url?: string };
@@ -208,7 +247,11 @@ export async function createNowPaymentsInvoice(
     if (!res.ok) {
       const detail = await res.text();
       console.error("NOWPayments invoice failed:", res.status, detail.slice(0, 400));
-      return { ok: false, reason: "provider-error", detail: `NOWPayments responded ${res.status}` };
+      return {
+        ok: false,
+        reason: "provider-error",
+        detail: describeHttpFailure("NOWPayments", res.status, config.baseUrl),
+      };
     }
 
     const data = (await res.json()) as { invoice_url?: string };
