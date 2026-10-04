@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Lock, Mail } from "lucide-react";
@@ -12,6 +12,7 @@ import { Logo } from "@/components/shared/Logo";
 import { toast } from "@/components/ui/use-toast";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { callbackUrl, rememberReturnTo } from "@/lib/auth-redirect";
 
 // The middleware sends ?next= when it bounces a visitor to /login. Only accept a
 // same-origin path, so the parameter can never redirect to another site.
@@ -41,7 +42,7 @@ export default function LoginPage() {
         type: "signup",
         email: unconfirmedEmail,
         options: {
-          emailRedirectTo: `${window.location.origin}/callback?next=%2Fdashboard`,
+          emailRedirectTo: callbackUrl(window.location.origin),
         },
       });
 
@@ -68,26 +69,9 @@ export default function LoginPage() {
     }
   };
 
-  // /callback redirects here with ?error= when the provider exchange fails. Without
-  // surfacing it a failed sign-in looks like a silent bounce back to the form.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const raw = params.get("error");
-    if (!raw) return;
-
-    toast({
-      title: "Sign-in did not complete",
-      description:
-        raw === "missing_oauth_code"
-          ? "The provider returned no authorisation code. Google sign-in is usually not enabled, or this URL is missing from its redirect allow-list."
-          : raw.replace(/_/g, " "),
-      variant: "destructive",
-    });
-
-    // Clear ?error= but keep ?next= so the deep link survives the failed attempt.
-    const next = params.get("next");
-    router.replace(next ? `/login?next=${encodeURIComponent(next)}` : "/login");
-  }, [router]);
+  // Sign-in failures are surfaced by the global AuthErrorBridge: Supabase reports
+  // provider errors on whatever page it redirects to (usually the Site URL root),
+  // not only here.
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -200,12 +184,14 @@ export default function LoginPage() {
     try {
       if (isSupabaseConfigured()) {
         const supabase = createClient();
+        // The deep link travels in a cookie, not in the redirect URL: Supabase
+        // will not use a redirect URL that its allowlist rejects, and a `?next=`
+        // query string is the usual reason for that rejection.
+        rememberReturnTo(destinationAfterSignIn());
         const { error } = await supabase.auth.signInWithOAuth({
           provider: "google",
           options: {
-            redirectTo: `${window.location.origin}/callback?next=${encodeURIComponent(
-              destinationAfterSignIn()
-            )}`,
+            redirectTo: callbackUrl(window.location.origin),
           },
         });
 

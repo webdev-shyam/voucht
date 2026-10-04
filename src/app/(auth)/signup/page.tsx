@@ -19,6 +19,7 @@ import { Logo } from "@/components/shared/Logo";
 import { toast } from "@/components/ui/use-toast";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { callbackUrl } from "@/lib/auth-redirect";
 
 const SKILLS = [
   "Developer",
@@ -60,8 +61,7 @@ export default function SignupPage() {
   const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
 
-  const confirmationRedirect = () =>
-    `${window.location.origin}/callback?next=%2Fdashboard`;
+  const confirmationRedirect = () => callbackUrl(window.location.origin);
 
   const handleResendConfirmation = async () => {
     if (!confirmationEmail || !isSupabaseConfigured()) return;
@@ -118,9 +118,9 @@ export default function SignupPage() {
           password,
           options: {
             // Without this the confirmation link opens the site root, the
-            // visitor sees the landing page and no session is created. The
-            // exact URL must also be listed in Supabase → URL Configuration →
-            // Redirect URLs.
+            // visitor sees the landing page and no session is created. It is a
+            // bare path on purpose: Supabase drops a redirect URL its allowlist
+            // does not match, and a query string is the usual reason it does not.
             emailRedirectTo: confirmationRedirect(),
             data: {
               full_name: fullName,
@@ -184,7 +184,7 @@ export default function SignupPage() {
         const { error } = await supabase.auth.signInWithOAuth({
           provider: "google",
           options: {
-            redirectTo: `${window.location.origin}/callback?next=/dashboard`,
+            redirectTo: callbackUrl(window.location.origin),
           },
         });
 

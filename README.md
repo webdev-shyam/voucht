@@ -135,17 +135,41 @@ when a migration adds a column.
 
 Everything here is dashboard state, not code — the app cannot supply it.
 
-**Redirect allowlist** — Authentication → URL Configuration → Redirect URLs:
+**Pick one canonical host first, and use it everywhere.** `https://voucht.tech`
+currently answers with a `308` to `https://www.voucht.tech`, so the app really
+runs on **www**. That matters because the site hands Supabase a redirect URL
+built from `window.location.origin` (i.e. `https://www.voucht.tech/callback`):
+if the Site URL or the allowlist names the apex instead, Supabase does not
+reject the request loudly — it falls back to the Site URL, and the browser
+arrives on a page that ignores the `code`, which reads as "the login screen
+just bounced me back".
+
+Authentication → URL Configuration:
 
 ```
-http://localhost:3000/callback
-https://voucht.tech/callback
+Site URL:      https://www.voucht.tech
+Redirect URLs: http://localhost:3000/callback
+               https://www.voucht.tech/callback
 ```
+
+Both entries are **bare paths with no query string, on purpose.** Supabase
+matches redirect URLs against the allowlist and silently discards one it does
+not recognise; an added `?next=…` is the usual reason a URL that looks correct
+in the address bar is not the one that gets used. The intended post-sign-in
+destination now travels in a short-lived `voucht_return_to` cookie instead.
 
 `/callback` is the only route that exchanges an OAuth or email-confirmation
-code for a session, so a missing entry makes Google sign-in bounce back without
-a visible error. Site URL must be `https://voucht.tech` in production, otherwise
-confirmation links open the wrong host.
+code for a session, so a missing entry makes sign-in bounce back without an
+obvious cause.
+
+**Google branding** — the consent screen says *"to continue to
+`<project-ref>.supabase.co`"* rather than *Voucht* because Google derives that
+line from the OAuth **authorised domain**, which is unset while only the
+Supabase host is registered. In Google Cloud → Auth → Branding: set
+**Authorization domain** to `www.voucht.tech`, set the **Application support
+email**, and add `https://www.voucht.tech/callback` under **Audience →
+Authorised redirect URIs**. Publish the app out of "Testing" or the flow stays
+restricted to allowlisted test users.
 
 **Google** — Authentication → Sign In / Providers → Google: enabled, with the
 OAuth client's redirect URI set to
@@ -164,6 +188,12 @@ they came from Voucht.
 ON. `signUp` then returns no session and the signup screen shows the
 check-your-inbox step; password sign-in stays blocked with "Email not confirmed"
 until the link is opened, and the login screen offers a resend.
+
+**When a provider sign-in fails**, Supabase redirects to the Site URL with
+`?error_code=…&error_description=…`. The app reads those on arrival and shows a
+dismissible banner, so note the code before dismissing it — `bad_oauth_state`
+means a used-up or expired attempt (retry from `/login`), while
+`provider_callback_failed` means the Supabase and Google redirect URIs disagree.
 
 ### 5. Run Development Server
 
