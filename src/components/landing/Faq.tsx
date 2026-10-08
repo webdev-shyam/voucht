@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, HelpCircle } from "lucide-react";
+import { SUPPORT_EMAIL } from "@/lib/constants";
 
 interface FaqItem {
   q: string;
@@ -40,7 +41,7 @@ const FAQS: FaqItem[] = [
   },
   {
     q: "Is my data safe?",
-    a: "Your data lives in a Postgres database with row-level security, so you only ever read and write your own rows, and traffic is encrypted in transit. Client emails and confirmation tokens exist to run the verification flow and are never shown on a public page; public surfaces show a masked name such as \"S***a J.\". There is no self-service delete button yet, so email hello@voucht.tech to remove a project or your whole account, and we do that by hand.",
+    a: `Your data lives in a Postgres database with row-level security, so you only ever read and write your own rows, and traffic is encrypted in transit. Client emails and confirmation tokens exist to run the verification flow and are never shown on a public page; public surfaces show a masked name such as \"S***a J.\". There is no self-service delete button yet, so email ${SUPPORT_EMAIL} to remove a project or your whole account, and we do that by hand.`,
   },
 ];
 

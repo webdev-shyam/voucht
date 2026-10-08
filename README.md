@@ -176,13 +176,27 @@ OAuth client's redirect URI set to
 `https://<project-ref>.supabase.co/auth/v1/callback`. The client secret lives in
 Supabase only; it is never an environment variable of this app.
 
-**Emails from your own domain** — Authentication → SMTP Settings: enable it and
-point it at your transactional provider (Resend: host `smtp.resend.com`, port
-`465`, user `resend`, password = the Resend API key). Set Sender email to an
-address on a domain you have DNS-verified there, e.g.
-`Voucht <hello@voucht.tech>`. Until SMTP is enabled, Supabase sends through its
-own `noreply@mail.app.supabase.io`, which is why confirmations do not look like
-they came from Voucht.
+**Emails from your own domain** — two separate senders, and both need the same
+DNS-verified domain:
+
+1. **Resend → Domains → Add Domain**: verify `voucht.tech` (a TXT record proves
+   ownership, two CNAME records are DKIM). Then merge Resend's SPF `include:`
+   into the **existing** `v=spf1 …` TXT record instead of adding a second one —
+   a domain may publish only one SPF record, and two records make receivers
+   reject both. Incoming mail is untouched: MX records still point at Titan, so
+   replies land in the normal mailbox.
+2. **Account confirmations** come from Supabase Auth, not from this codebase.
+   Authentication → SMTP Settings: enable it and enter Resend (host
+   `smtp.resend.com`, port `465`, user `resend`, password = the Resend API key),
+   with Sender email `Voucht <support@voucht.tech>`. Until SMTP is enabled
+   Supabase sends through its own `noreply@mail.app.supabase.io`, which is why
+   confirmations do not look like they came from Voucht.
+3. **Everything else** (client verification links, milestone reminders, billing)
+   is sent by `src/lib/email.ts` through Resend. Its sender addresses default to
+   `SUPPORT_EMAIL` and can be overridden per flow with `EMAIL_FROM_VERIFICATION`,
+   `EMAIL_FROM_REMINDERS` and `EMAIL_FROM_BILLING`; the address shown across the
+   site is `NEXT_PUBLIC_SUPPORT_EMAIL`. All three must be on the domain verified
+   in step 1 — Resend rejects mail from any other domain.
 
 **Require confirmation** — Authentication → Providers → Email: "Confirm email"
 ON. `signUp` then returns no session and the signup screen shows the
