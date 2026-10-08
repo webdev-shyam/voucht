@@ -1,6 +1,7 @@
 import { MetadataRoute } from "next";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { SITE_ORIGIN } from "@/lib/constants";
 
 interface SitemapProfile {
   username: string;
@@ -8,7 +9,7 @@ interface SitemapProfile {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://voucht.tech";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || SITE_ORIGIN;
 
   // Static core routes
   const staticRoutes: MetadataRoute.Sitemap = [

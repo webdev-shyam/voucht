@@ -1,7 +1,8 @@
 import { MetadataRoute } from "next";
+import { SITE_ORIGIN } from "@/lib/constants";
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://voucht.tech";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || SITE_ORIGIN;
 
   return {
     rules: {

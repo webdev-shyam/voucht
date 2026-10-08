@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/shared/ThemeProvider";
 import { AuthErrorBridge } from "@/components/shared/AuthErrorBridge";
 import { Toaster } from "@/components/ui/toaster";
+import { APP_URL, SITE_ORIGIN } from "@/lib/constants";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
   title: "Voucht — The Trust Layer for Freelancers",
   description:
     "Build a verified Trust Score that proves your reliability. Get vouched. Get hired.",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://voucht.tech"),
+  metadataBase: new URL(APP_URL),
   icons: {
     icon: "/icon.svg",
     shortcut: "/icon.svg",
@@ -21,7 +22,7 @@ export const metadata: Metadata = {
     title: "Voucht — The Trust Layer for Freelancers",
     description:
       "Build a verified Trust Score that proves your reliability. Get vouched. Get hired.",
-    url: "https://voucht.tech",
+    url: SITE_ORIGIN,
     siteName: "Voucht",
     type: "website",
     images: [
