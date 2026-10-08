@@ -107,10 +107,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Processing failed" }, { status: 500 });
     }
 
-    await supabase
+    // `profiles.plan` is what the app reads to gate access, so a subscription
+    // row that wrote and a profile that did not is still an unpaid customer.
+    const { error: profileError } = await supabase
       .from("profiles")
       .update({ plan, plan_expires_at: periodEnd })
       .eq("id", userId);
+
+    if (profileError) {
+      console.error("[NOWPayments IPN] profile plan not written:", profileError.message);
+      return NextResponse.json({ error: "Processing failed" }, { status: 500 });
+    }
 
     await supabase.from("activity_log").insert({
       user_id: userId,

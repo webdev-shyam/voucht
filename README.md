@@ -211,16 +211,23 @@ curl -s https://www.voucht.tech/api/checkout/status
 
 **Cards — CREEM.** Needs three values, and checkout is enabled **per plan**:
 
+Each product must be priced as a **Subscription / every month**, not a single
+payment. A one-time product charges once and then never sends
+`subscription.paid`, so access ends after the first period with no renewal and
+no cancel; the billing screen would still have called that date a renewal.
+
 | Variable | Where it comes from |
 | --- | --- |
-| `CREEM_API_KEY` | CREEM dashboard → Developers. A key starting with `creem_test_` automatically targets the test API. |
+| `CREEM_API_KEY` | CREEM dashboard → Developers. CREEM picks test or live by **host**, not by the key, so use `CREEM_TEST_MODE=true` (or `CREEM_API_BASE`) for the sandbox. |
 | `CREEM_PRODUCT_ID_PRO` | the Pro product's id, `prod_…` |
 | `CREEM_PRODUCT_ID_ELITE` | the Elite product's id — a second product, not the same one |
 | `CREEM_WEBHOOK_SECRET` | the signing secret of the webhook below |
 
 Create the webhook in CREEM pointing at
 `https://www.voucht.tech/api/webhooks/creem` and subscribe it to
-`checkout.success` and `subscription.*`. Only that signed webhook activates a
+`checkout.completed`, `subscription.active`, `subscription.paid`,
+`subscription.canceled`, `subscription.expired`, `subscription.unpaid` and
+`subscription.past_due`. Only that signed webhook activates a
 plan — the success redirect carries a signature that proves where the visitor
 came from, and nothing more.
 

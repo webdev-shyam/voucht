@@ -76,6 +76,9 @@ export function getCreemConfig(): CreemConfig | null {
   const explicitBase = cleanEnv(process.env.CREEM_API_BASE);
   if (explicitBase) return { apiKey, baseUrl: explicitBase.replace(/\/$/, "") };
 
+  // CREEM picks the environment by host rather than by the key, so
+  // CREEM_TEST_MODE is the reliable switch; the prefix only helps when a test
+  // key happens to carry one.
   const isTest = apiKey.startsWith("creem_test_") || process.env.CREEM_TEST_MODE === "true";
   return {
     apiKey,
