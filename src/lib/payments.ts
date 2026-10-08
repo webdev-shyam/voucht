@@ -1,9 +1,9 @@
 import crypto from "crypto";
-import { SITE_ORIGIN } from "@/lib/constants";
+import { originFromEnv } from "@/lib/constants";
 
 // Server-side mirror of the site origin; see the note in src/lib/constants.ts on
 // why this has to be the host the app is really served from.
-const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || SITE_ORIGIN;
+const APP_URL = originFromEnv(process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL);
 
 export type PaidPlan = "pro" | "elite";
 
