@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SUPPORT_EMAIL } from "@/lib/constants";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -153,10 +154,10 @@ export default function PrivacyPage() {
             <p>
               There is no self-service delete button in the product yet. Email{" "}
               <a
-                href="mailto:hello@voucht.tech?subject=Data%20deletion%20request"
+                href={`mailto:${SUPPORT_EMAIL}?subject=Data%20deletion%20request`}
                 className="text-[#00ff88] underline underline-offset-4"
               >
-                hello@voucht.tech
+                {SUPPORT_EMAIL}
               </a>{" "}
               from the address on the account and we will remove a project, a
               client record, or the whole account including its auth user, then
@@ -195,7 +196,7 @@ export default function PrivacyPage() {
           </Section>
 
           <p className="text-sm text-[#a0a0b8] pt-4 border-t border-white/10">
-            Questions: <a href="mailto:hello@voucht.tech" className="text-[#00ff88] underline underline-offset-4">hello@voucht.tech</a>. See also the{" "}
+            Questions: <a href={`mailto:${SUPPORT_EMAIL}`} className="text-[#00ff88] underline underline-offset-4">{SUPPORT_EMAIL}</a>. See also the{" "}
             <Link href="/terms" className="text-[#00ff88] underline underline-offset-4">
               Terms of Service
             </Link>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/shared/Logo";
+import { SUPPORT_EMAIL } from "@/lib/constants";
 
 export function Footer() {
   return (
@@ -71,7 +72,7 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <a href="mailto:hello@voucht.tech" className="hover:text-white transition-colors">
+                <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-white transition-colors">
                   Contact
                 </a>
               </li>

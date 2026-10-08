@@ -20,6 +20,14 @@ export function originFromEnv(value: string | undefined): string {
 
 export const APP_URL = originFromEnv(process.env.NEXT_PUBLIC_APP_URL);
 
+// The mailbox customers see on the site (terms, privacy, footer, FAQ, cancel
+// link) and that transactional mail is sent from. Public because it is rendered
+// into `mailto:` links in client components. It must be on a domain verified
+// with the email provider, or the mail will not be sent at all; replies to it
+// land in the Titan mailbox for the same address.
+export const SUPPORT_EMAIL =
+  (process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "").trim() || "support@voucht.tech";
+
 // Badge tiers and their thresholds live in src/lib/trust-score.ts (BADGE_TIERS),
 // which mirrors the single database implementation of the score.
 

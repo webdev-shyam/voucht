@@ -1,8 +1,21 @@
 import { Resend } from "resend";
-import { APP_URL } from "@/lib/constants";
+import { APP_URL, SUPPORT_EMAIL } from "@/lib/constants";
 
 const resendApiKey = process.env.RESEND_API_KEY;
 export const resend = resendApiKey ? new Resend(resendApiKey) : null;
+
+// Resend refuses to send from a domain whose DNS the account has not verified,
+// so the sender is deployment configuration rather than a constant: pointing the
+// app at a different mailbox should be an environment change, not an edit here.
+// Unset falls back to the address the site already tells customers to write to.
+function senderAddress(envName: string, label: string): string {
+  const address = (process.env[envName] ?? "").trim() || SUPPORT_EMAIL;
+  return `${label} <${address}>`;
+}
+
+const FROM_VERIFICATION = senderAddress("EMAIL_FROM_VERIFICATION", "Voucht Verification");
+const FROM_REMINDERS = senderAddress("EMAIL_FROM_REMINDERS", "Voucht Reminders");
+const FROM_BILLING = senderAddress("EMAIL_FROM_BILLING", "Voucht Billing");
 
 // Base HTML Wrapper for Voucht Emails
 function getEmailWrapper(content: string) {
@@ -102,7 +115,7 @@ export async function sendClientProjectConfirmationEmail({
 
   try {
     const data = await resend.emails.send({
-      from: "Voucht Verification <verify@voucht.tech>",
+      from: FROM_VERIFICATION,
       to: [to],
       subject: `${freelancerName} added you as a client on Voucht`,
       html,
@@ -173,7 +186,7 @@ export async function sendMilestoneVerificationEmail({
 
   try {
     const data = await resend.emails.send({
-      from: "Voucht Verification <verify@voucht.tech>",
+      from: FROM_VERIFICATION,
       to: [to],
       subject: `Please confirm: ${milestoneTitle} delivered`,
       html,
@@ -246,7 +259,7 @@ export async function sendMilestoneReminderEmail({
 
   try {
     const data = await resend.emails.send({
-      from: "Voucht Reminders <reminders@voucht.tech>",
+      from: FROM_REMINDERS,
       to: [to],
       subject: `⏰ Reminder: '${milestoneTitle}' is due in 2 days`,
       html,
@@ -314,7 +327,7 @@ export async function sendSubscriptionExpiringEmail({
 
   try {
     const data = await resend.emails.send({
-      from: "Voucht Subscriptions <billing@voucht.tech>",
+      from: FROM_BILLING,
       to: [to],
       subject: `Your Voucht ${planDisplay} plan expires in ${daysLeft} days. Renew to keep your features.`,
       html,
@@ -361,7 +374,7 @@ export async function sendPaymentFailedEmail({
 
   try {
     const data = await resend.emails.send({
-      from: "Voucht Billing <billing@voucht.tech>",
+      from: FROM_BILLING,
       to: [to],
       subject: "Your payment failed. Please update your payment method.",
       html,

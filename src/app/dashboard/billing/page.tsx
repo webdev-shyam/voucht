@@ -31,7 +31,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { PRICING_PLANS } from "@/lib/constants";
+import { PRICING_PLANS, SUPPORT_EMAIL } from "@/lib/constants";
 import { useAppStore } from "@/store/useAppStore";
 import { toast } from "@/components/ui/use-toast";
 
@@ -469,7 +469,7 @@ function BillingContent() {
               asChild
               className="text-xs font-bold text-electric hover:bg-electric/10"
             >
-              <a href="mailto:hello@voucht.tech?subject=Cancel%20my%20subscription">
+              <a href={`mailto:${SUPPORT_EMAIL}?subject=Cancel%20my%20subscription`}>
                 Contact support to cancel
               </a>
             </Button>

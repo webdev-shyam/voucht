@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SUPPORT_EMAIL } from "@/lib/constants";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
@@ -149,10 +150,10 @@ export default function TermsPage() {
               <li>
                 Refunds are handled case by case; send a request to{" "}
                 <a
-                  href="mailto:hello@voucht.tech?subject=Refund%20request"
+                  href={`mailto:${SUPPORT_EMAIL}?subject=Refund%20request`}
                   className="text-[#00ff88] underline underline-offset-4"
                 >
-                  hello@voucht.tech
+                  {SUPPORT_EMAIL}
                 </a>{" "}
                 and we will tell you honestly what is possible. There is no
                 automatic money-back promise.
@@ -184,8 +185,8 @@ export default function TermsPage() {
           <Section title="Suspension and termination">
             <p>
               You can ask us to delete your account at any time by emailing{" "}
-              <a href="mailto:hello@voucht.tech" className="text-[#00ff88] underline underline-offset-4">
-                hello@voucht.tech
+              <a href={`mailto:${SUPPORT_EMAIL}`} className="text-[#00ff88] underline underline-offset-4">
+                {SUPPORT_EMAIL}
               </a>{" "}
               from the address on the account. We may suspend or stop providing the
               service where we reasonably believe these terms are being broken,
@@ -225,8 +226,8 @@ export default function TermsPage() {
           <Section title="Contact">
             <p>
               Questions, abuse reports and deletion requests:{" "}
-              <a href="mailto:hello@voucht.tech" className="text-[#00ff88] underline underline-offset-4">
-                hello@voucht.tech
+              <a href={`mailto:${SUPPORT_EMAIL}`} className="text-[#00ff88] underline underline-offset-4">
+                {SUPPORT_EMAIL}
               </a>
               . See also the{" "}
               <Link href="/privacy" className="text-[#00ff88] underline underline-offset-4">
