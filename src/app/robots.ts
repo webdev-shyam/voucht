@@ -1,9 +1,7 @@
 import { MetadataRoute } from "next";
-import { SITE_ORIGIN } from "@/lib/constants";
+import { APP_URL } from "@/lib/constants";
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || SITE_ORIGIN;
-
   return {
     rules: {
       userAgent: "*",
@@ -12,6 +10,6 @@ export default function robots(): MetadataRoute.Robots {
       // should be crawled, even the parts a logged-out visitor cannot reach.
       disallow: ["/api/", "/dashboard"],
     },
-    sitemap: `${baseUrl}/sitemap.xml`,
+    sitemap: `${APP_URL}/sitemap.xml`,
   };
 }

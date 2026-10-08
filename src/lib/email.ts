@@ -1,10 +1,8 @@
 import { Resend } from "resend";
-import { SITE_ORIGIN } from "@/lib/constants";
+import { APP_URL } from "@/lib/constants";
 
 const resendApiKey = process.env.RESEND_API_KEY;
 export const resend = resendApiKey ? new Resend(resendApiKey) : null;
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || SITE_ORIGIN;
 
 // Base HTML Wrapper for Voucht Emails
 function getEmailWrapper(content: string) {
