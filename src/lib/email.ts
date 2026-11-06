@@ -1,5 +1,11 @@
 import { Resend } from "resend";
 import { APP_URL, SUPPORT_EMAIL } from "@/lib/constants";
+import {
+  creemPlanAvailability,
+  isNowPaymentsConfigured,
+  nowPaymentsPayCurrency,
+  type PaidPlan,
+} from "@/lib/payments";
 
 const resendApiKey = process.env.RESEND_API_KEY;
 export const resend = resendApiKey ? new Resend(resendApiKey) : null;
@@ -16,6 +22,23 @@ function senderAddress(envName: string, label: string): string {
 const FROM_VERIFICATION = senderAddress("EMAIL_FROM_VERIFICATION", "Voucht Verification");
 const FROM_REMINDERS = senderAddress("EMAIL_FROM_REMINDERS", "Voucht Reminders");
 const FROM_BILLING = senderAddress("EMAIL_FROM_BILLING", "Voucht Billing");
+
+// The expiry notice used to name both providers unconditionally, which told a
+// customer that card checkout existed on a deployment with no card provider
+// wired up. Report what is actually configured for this plan instead.
+function renewalMethods(plan: string): string {
+  const payCurrency = nowPaymentsPayCurrency();
+  const methods = [
+    isNowPaymentsConfigured()
+      ? payCurrency
+        ? `Crypto in ${payCurrency.toUpperCase()}`
+        : "Crypto (NOWPayments)"
+      : null,
+    creemPlanAvailability()[plan as PaidPlan] ? "Card (CREEM)" : null,
+  ].filter(Boolean);
+
+  return methods.length > 0 ? methods.join(" / ") : `Email ${SUPPORT_EMAIL}`;
+}
 
 // Base HTML Wrapper for Voucht Emails
 function getEmailWrapper(content: string) {
@@ -305,7 +328,7 @@ export async function sendSubscriptionExpiringEmail({
       </div>
       <div style="display: flex; justify-content: space-between; font-size: 13px;">
         <span style="color: #94a3b8;">Renewal Method:</span>
-        <span style="color: #ffffff;">Crypto (NOWPayments) / Card (CREEM)</span>
+        <span style="color: #ffffff;">${renewalMethods(plan)}</span>
       </div>
     </div>
 
