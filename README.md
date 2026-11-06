@@ -220,7 +220,7 @@ Check what a deployment currently sees:
 
 ```bash
 curl -s https://www.voucht.tech/api/checkout/status
-# {"creem":{"pro":false,"elite":false},"nowpayments":false}
+# {"creem":{"pro":false,"elite":false},"nowpayments":false,"nowpayments_currency":null}
 ```
 
 **Cards — CREEM.** Needs three values, and checkout is enabled **per plan**:
@@ -252,6 +252,33 @@ unavailable. Set the IPN/Webhook URL in NOWPayments to
 `NOWPAYMENTS_SANDBOX` unset or `false` in production: setting it to `true`
 sends a live API key to the sandbox host, which rejects it, and that mismatch
 was previously indistinguishable from any other failure.
+
+**`NOWPAYMENTS_PAY_CURRENCY` is optional and it locks the page.** With it unset,
+NOWPayments opens the hosted page defaulting to BTC, and a $10 plan converts to
+an amount below their BTC minimum — the provider then renders *"Crypto amount
+… is less than minimal"* on their own page, after our invoice call returned
+HTTP 200, so nothing appears in the app's logs. Setting the variable sends
+`pay_currency` on the invoice and fixes the page to that one asset, which is why
+the upgrade dialog names the coin before the click. Two traps: the code has to
+be one **enabled on your account** (the bare `usdt` is not — NOWPayments
+suffixes codes by network, and their API rejects an unknown asset with
+`Currency X is currently unavailable`), and it has to be a coin whose minimum
+$10 clears and whose fees are small enough not to eat the payment. Read the
+account's own list rather than guessing:
+
+```bash
+NOWPAYMENTS_API_KEY="paste-your-key" node -e '
+  fetch("https://api.nowpayments.io/v1/full-currencies",{headers:{"x-api-key":process.env.NOWPAYMENTS_API_KEY}})
+    .then(r=>r.json()).then(j=>{
+      const c=j.currencies.filter(x=>x.enable&&x.available_for_payment);
+      console.log(c.length,"payable:",c.map(x=>x.code).join(", "));
+      console.log("tethers:",c.filter(x=>/usdt|tether/i.test(x.code+x.name)).map(x=>x.code+"("+x.network+")").join(", "));
+    });'
+```
+
+There is no endpoint that returns a coin's minimum (`/v1/limit/…` is 404 and
+`/v1/min-amount` rejects a `currency_pair` param), so confirm the chosen asset
+by opening one test invoice and checking the page renders without the error.
 
 **`APP_URL` / `NEXT_PUBLIC_APP_URL` must be `https://www.voucht.tech`, not the
 apex.** These values build the `ipn_callback_url` and the success/cancel URLs.

@@ -34,6 +34,7 @@ interface UpgradeModalProps {
 interface ProviderAvailability {
   creem: { pro: boolean; elite: boolean };
   nowpayments: boolean;
+  nowpayments_currency?: string | null;
 }
 
 export function UpgradeModal({
@@ -68,6 +69,9 @@ export function UpgradeModal({
 
   const cardUnavailable = availability?.creem?.[selectedPlan] === false;
   const cryptoUnavailable = availability?.nowpayments === false;
+  // When the server names an asset, the provider page is locked to it, so the
+  // dialog says which coin before the click instead of after.
+  const cryptoAsset = availability?.nowpayments_currency ?? null;
 
   const getFeatureHeading = () => {
     if (title) return title;
@@ -297,10 +301,17 @@ export function UpgradeModal({
                 <span>
                   {cryptoUnavailable
                     ? "Crypto checkout unavailable"
-                    : `Pay with Crypto — $${activePrice}/mo`}
+                    : `Pay with ${cryptoAsset ? cryptoAsset.toUpperCase() : "Crypto"} — $${activePrice}/mo`}
                 </span>
               </Button>
             </div>
+
+            {!cryptoUnavailable && cryptoAsset ? (
+              <p className="text-[11px] text-textSecondary leading-relaxed">
+                Crypto checkout is fixed to <span className="text-white font-semibold">{cryptoAsset.toUpperCase()}</span> —
+                the provider page will not offer other coins for this payment.
+              </p>
+            ) : null}
 
             {cardUnavailable && cryptoUnavailable ? (
               <p className="text-[11px] text-textSecondary leading-relaxed">

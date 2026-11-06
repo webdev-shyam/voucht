@@ -218,6 +218,19 @@ export function isNowPaymentsConfigured(): boolean {
   return !!getNowPaymentsConfig() && !!cleanEnv(process.env.NOWPAYMENTS_IPN_SECRET);
 }
 
+// Which asset the hosted page opens on. NOWPayments locks the payment page to
+// whatever this names, so it is a deployment decision rather than something to
+// guess in code: the value must be an asset enabled on the account AND one whose
+// network minimum the plan price clears. A $10 invoice cannot be paid in BTC,
+// whose minimum sits above it — the provider renders that as an error on their
+// own page, after we have already handed the customer over.
+// Codes are network-suffixed (a USDT on TRON is not the bare "usdt"), so the
+// exact string has to come from the account's own coin list.
+export function nowPaymentsPayCurrency(): string | null {
+  const value = cleanEnv(process.env.NOWPAYMENTS_PAY_CURRENCY);
+  return value ? value.toLowerCase() : null;
+}
+
 export async function createNowPaymentsInvoice(
   plan: PaidPlan,
   options: { userId: string; email: string }
@@ -226,6 +239,23 @@ export async function createNowPaymentsInvoice(
   if (!config) return { ok: false, reason: "not-configured" };
 
   const amount = PLAN_PRICES[plan];
+  const payCurrency = nowPaymentsPayCurrency();
+
+  // A retry after an underpaid attempt, and next month's renewal, both start a
+  // new invoice here. A stable id would describe all of them, so the attempt
+  // carries a nonce; the IPN parser strips it back off again.
+  const body: Record<string, unknown> = {
+    price_amount: amount,
+    price_currency: "usd",
+    order_id: `${options.userId}_${plan}_${Date.now()}`,
+    order_description: `Voucht ${plan} plan (30 days) for ${options.email}`,
+    ipn_callback_url: `${APP_URL}/api/webhooks/nowpayments`,
+    // Crypto payments are only confirmed once the IPN reports the network
+    // status, so the success page is labelled as pending, never as paid.
+    success_url: `${APP_URL}/dashboard/billing?provider=nowpayments&pending=true`,
+    cancel_url: `${APP_URL}/dashboard/billing`,
+  };
+  if (payCurrency) body.pay_currency = payCurrency;
 
   try {
     const res = await fetch(`${config.baseUrl}/invoice`, {
@@ -234,17 +264,7 @@ export async function createNowPaymentsInvoice(
         "x-api-key": config.apiKey,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        price_amount: amount,
-        price_currency: "usd",
-        order_id: `${options.userId}_${plan}`,
-        order_description: `Voucht ${plan} plan (30 days) for ${options.email}`,
-        ipn_callback_url: `${APP_URL}/api/webhooks/nowpayments`,
-        // Crypto payments are only confirmed once the IPN reports the network
-        // status, so the success page is labelled as pending, never as paid.
-        success_url: `${APP_URL}/dashboard/billing?provider=nowpayments&pending=true`,
-        cancel_url: `${APP_URL}/dashboard/billing`,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
@@ -253,7 +273,14 @@ export async function createNowPaymentsInvoice(
       return {
         ok: false,
         reason: "provider-error",
-        detail: describeHttpFailure("NOWPayments", res.status, config.baseUrl),
+        // A rejected request that named an asset is almost always that asset
+        // being unavailable on the account. The provider's own wording is in
+        // the log above; this names which part of our configuration to change
+        // without echoing a response body out to the browser.
+        detail:
+          (res.status === 400 || res.status === 422) && payCurrency
+            ? `NOWPayments will not take ${payCurrency.toUpperCase()} on this account, or $${amount} is below that asset's minimum. Choose an enabled asset in NOWPAYMENTS_PAY_CURRENCY, or clear it to let the payer pick the coin.`
+            : describeHttpFailure("NOWPayments", res.status, config.baseUrl),
       };
     }
 

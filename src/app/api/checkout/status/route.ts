@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { creemPlanAvailability, isNowPaymentsConfigured } from "@/lib/payments";
+import {
+  creemPlanAvailability,
+  isNowPaymentsConfigured,
+  nowPaymentsPayCurrency,
+} from "@/lib/payments";
 
 // Feature availability only. The UI uses this to mark a payment method as
 // unavailable instead of pretending a checkout was started; no key material,
@@ -14,5 +18,9 @@ export async function GET() {
   return NextResponse.json({
     creem: creemPlanAvailability(),
     nowpayments: isNowPaymentsConfigured(),
+    // The hosted crypto page is locked to this asset when it is set, so the
+    // dialog has to name it before the click rather than surprise the payer
+    // with a single coin on the provider's page.
+    nowpayments_currency: nowPaymentsPayCurrency(),
   });
 }

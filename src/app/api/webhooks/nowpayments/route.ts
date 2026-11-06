@@ -51,9 +51,11 @@ export async function POST(request: Request) {
   }
 
   const { payment_status, order_id, actually_paid, price_amount, payment_id } = payload;
-  const orderId = String(order_id ?? "");
-
-  // order_id is minted by our checkout as `${userId}_${plan}`.
+  // order_id is minted by our checkout as `${userId}_${plan}_${attempt}`. The
+  // attempt nonce is optional so invoices created before it existed still
+  // resolve; a Supabase uuid has no underscores, so the plan is the last
+  // segment of what remains.
+  const orderId = String(order_id ?? "").replace(/_\d+$/, "");
   const lastUnderscore = orderId.lastIndexOf("_");
   const userId = lastUnderscore > 0 ? orderId.slice(0, lastUnderscore) : "";
   const planPart = lastUnderscore > 0 ? orderId.slice(lastUnderscore + 1).toLowerCase() : "";
