@@ -74,8 +74,9 @@ export async function POST(request: Request) {
 
   console.log(`[NOWPayments IPN] ${payment_status} for order ${orderId}`);
 
-  // Pending and failed events do not change subscription state.
-  if (payment_status !== "finished" && payment_status !== "confirmed") {
+  // NOWPayments can report "confirmed" while funds are still being processed.
+  // Only "finished" is the completed state that may activate a subscription.
+  if (payment_status !== "finished") {
     return NextResponse.json({ received: true, status: payment_status ?? "acknowledged" });
   }
 
