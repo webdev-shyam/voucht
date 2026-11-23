@@ -35,6 +35,8 @@ function verifySignature(payload: unknown, received: string | null): boolean {
   return crypto.timingSafeEqual(a, b);
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function POST(request: Request) {
   let payload: any;
   try {
@@ -50,12 +52,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
-  const { payment_status, order_id, actually_paid, price_amount, payment_id } = payload;
-  // order_id is minted by our checkout as `${userId}_${plan}_${attempt}`. The
-  // attempt nonce is optional so invoices created before it existed still
-  // resolve; a Supabase uuid has no underscores, so the plan is the last
-  // segment of what remains.
-  const orderId = String(order_id ?? "").replace(/_\d+$/, "");
+  const {
+    payment_status,
+    order_id,
+    actually_paid,
+    pay_amount,
+    pay_currency,
+    price_amount,
+    price_currency,
+    payment_id,
+  } = payload;
+
+  // order_id is minted by checkout as `${userId}_${plan}_${attempt}`.
+  // Strip the attempt nonce, then split the UUID from the plan.
+  const rawOrderId = String(order_id ?? "");
+  const orderId = rawOrderId.replace(/_\d+$/, "");
   const lastUnderscore = orderId.lastIndexOf("_");
   const userId = lastUnderscore > 0 ? orderId.slice(0, lastUnderscore) : "";
   const planPart = lastUnderscore > 0 ? orderId.slice(lastUnderscore + 1).toLowerCase() : "";
@@ -63,71 +74,85 @@ export async function POST(request: Request) {
 
   console.log(`[NOWPayments IPN] ${payment_status} for order ${orderId}`);
 
-  if (!isSupabaseConfigured()) {
-    return NextResponse.json({ received: true, ignored: "database-not-configured" });
+  // Pending and failed events do not change subscription state.
+  if (payment_status !== "finished" && payment_status !== "confirmed") {
+    return NextResponse.json({ received: true, status: payment_status ?? "acknowledged" });
   }
 
-  if (payment_status === "finished" || payment_status === "confirmed") {
-    if (!userId || !plan) {
-      return NextResponse.json({ received: true, ignored: "unattributed-payment" });
-    }
+  if (!userId || !UUID_PATTERN.test(userId) || !plan || !String(payment_id ?? "").trim()) {
+    console.warn("[NOWPayments IPN] Final payment could not be attributed to an account");
+    return NextResponse.json({ received: true, ignored: "unattributed-payment" });
+  }
 
-    // Crypto has no partial-plan concept: an underpaid invoice does not buy
-    // anything. The payer is left on Free and can re-open a checkout.
-    const required = Number(price_amount ?? PLAN_PRICES[plan]);
-    const paid = Number(actually_paid ?? 0);
+  // price_amount is fiat (USD); pay_amount and actually_paid are crypto.
+  // Never compare values expressed in different currencies.
+  const expectedUsd = PLAN_PRICES[plan];
+  const receivedUsd = Number(price_amount);
+  const expectedCrypto = Number(pay_amount);
+  const paidCrypto = Number(actually_paid);
+  const fiatCurrency = String(price_currency ?? "").trim().toUpperCase();
+  const cryptoCurrency = String(pay_currency ?? "").trim().toLowerCase();
 
-    if (!Number.isFinite(required) || !Number.isFinite(paid) || paid < required) {
-      console.warn(
-        `[NOWPayments IPN] Underpayment ignored: paid ${paid} of ${required} for order ${orderId}`
-      );
-      return NextResponse.json({ received: true, ignored: "underpaid" });
-    }
+  if (
+    fiatCurrency !== "USD" ||
+    !Number.isFinite(receivedUsd) ||
+    Math.abs(receivedUsd - expectedUsd) > 0.01 ||
+    !cryptoCurrency ||
+    !Number.isFinite(expectedCrypto) ||
+    expectedCrypto <= 0 ||
+    !Number.isFinite(paidCrypto) ||
+    paidCrypto <= 0
+  ) {
+    console.warn(`[NOWPayments IPN] Invalid payment amounts or currencies for order ${orderId}`);
+    return NextResponse.json({ received: true, ignored: "invalid-payment-details" });
+  }
 
-    const now = new Date();
-    const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    const supabase = createAdminClient();
-
-    const { error: subError } = await supabase.from("subscriptions").upsert(
-      {
-        user_id: userId,
-        plan,
-        payment_provider: "nowpayments",
-        status: "active",
-        provider_subscription_id: String(payment_id ?? `np_${now.getTime()}`),
-        current_period_start: now.toISOString(),
-        current_period_end: periodEnd,
-        amount: required,
-        currency: "USD",
-        updated_at: now.toISOString(),
-      },
-      { onConflict: "user_id" }
+  // Allow only a tiny floating-point rounding margin. A material underpayment
+  // must not unlock a paid plan.
+  const cryptoTolerance = Math.max(expectedCrypto * 1e-8, 1e-12);
+  if (paidCrypto + cryptoTolerance < expectedCrypto) {
+    console.warn(
+      `[NOWPayments IPN] Underpayment ignored: received ${paidCrypto} ${cryptoCurrency}; expected ${expectedCrypto} ${cryptoCurrency}`
     );
-
-    if (subError) {
-      console.error("[NOWPayments IPN] subscription upsert failed:", subError.message);
-      return NextResponse.json({ error: "Processing failed" }, { status: 500 });
-    }
-
-    // `profiles.plan` is what the app reads to gate access, so a subscription
-    // row that wrote and a profile that did not is still an unpaid customer.
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .update({ plan, plan_expires_at: periodEnd })
-      .eq("id", userId);
-
-    if (profileError) {
-      console.error("[NOWPayments IPN] profile plan not written:", profileError.message);
-      return NextResponse.json({ error: "Processing failed" }, { status: 500 });
-    }
-
-    await supabase.from("activity_log").insert({
-      user_id: userId,
-      action: "subscription_changed",
-      description: `${plan === "elite" ? "Elite" : "Pro"} unlocked with a crypto payment; access runs to ${periodEnd.slice(0, 10)}.`,
-      metadata: { provider: "nowpayments", payment_id: String(payment_id ?? "") },
-    });
+    return NextResponse.json({ received: true, ignored: "underpaid" });
   }
 
-  return NextResponse.json({ received: true, status: payment_status ?? "acknowledged" });
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Database is not configured" }, { status: 503 });
+  }
+
+  const supabase = createAdminClient();
+
+  // This RPC records the provider payment ID and applies the subscription
+  // update in one database transaction. Duplicate IPNs therefore cannot grant
+  // extra billing time, including when NOWPayments retries concurrently.
+  const { data, error } = await supabase.rpc("process_nowpayments_payment", {
+    p_payment_id: String(payment_id),
+    p_user_id: userId,
+    p_plan: plan,
+    p_order_id: rawOrderId,
+    p_price_amount: receivedUsd,
+    p_price_currency: fiatCurrency,
+    p_pay_currency: cryptoCurrency,
+    p_pay_amount: expectedCrypto,
+    p_actually_paid: paidCrypto,
+  });
+
+  if (error) {
+    console.error("[NOWPayments IPN] Atomic payment processing failed:", error.message);
+    return NextResponse.json({ error: "Processing failed" }, { status: 500 });
+  }
+
+  if (data?.duplicate) {
+    console.log(`[NOWPayments IPN] Duplicate payment ${payment_id} acknowledged`);
+  } else if (data?.success !== true) {
+    console.error("[NOWPayments IPN] Payment RPC returned an unexpected result");
+    return NextResponse.json({ error: "Processing failed" }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    received: true,
+    status: payment_status,
+    duplicate: Boolean(data?.duplicate),
+  });
 }
